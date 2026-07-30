@@ -1,0 +1,3 @@
+# Default data root. Overridden by environment variable TX_DATA_ROOT.
+# Relative paths are resolved from the repo root.
+data_root: nemo_mock
