@@ -37,11 +37,11 @@ workflow_notes: |
 filters_of_interest:
   # Common filter recipes downstream code should know about.
   present_in_sample: "is_present == True"
-  pass_all_qc: "PASS == True"
+  called: "CALLED == True"       # PASS is True for every row — useless as a filter; use CALLED
   coding_only: "func_refgene == 'exonic'"
   snv_only: "is_snv == True"
 
-genome_build: unknown  # TODO confirm hg19 vs hg38 (chr is 1-22/X/Y, no 'chr' prefix)
+genome_build: hg19     # confirmed 2026-08-31; downstream analysis targets hg38 → liftover step needed
 chr_prefix: false      # values are '10', not 'chr10'
 
 columns:
@@ -228,12 +228,17 @@ columns:
   # ---- global QC ----
   - name: CALLED
     type: BOOLEAN
-    description: Overall CALLED flag.
-    notes: "Precise definition TBC."
+    description: |
+      Overall CALLED flag. Meaningful filter — is sometimes false. Use as the
+      default mutation-quality filter for downstream analyses.
+    null_semantics: not_applicable
   - name: PASS
     type: BOOLEAN
-    description: Overall PASS flag across QC filters.
-    notes: "Precise definition TBC."
+    description: |
+      Overall PASS flag. In Tx842 this is TRUE for every row observed so far,
+      so it carries no information — ignore in favour of CALLED. Kept for
+      lineage / provenance.
+    notes: "Effectively constant TRUE; do not use as a filter."
 
   # ---- driver annotation ----
   - name: pan_cancer_driver
@@ -339,26 +344,39 @@ columns:
     null_semantics: not_applicable
   - name: timing
     type: VARCHAR
-    description: Timing label (e.g. early, late). Confirm value set + rule.
-    notes: "Value set TBC."
+    description: Timing label (e.g. early). Provenance and rule TBC.
+    notes: "Ignore for now (2026-08-31) — origin unknown, do not use in analysis until documented."
   - name: mutation_cluster
     type: DOUBLE
     description: |
-      Cluster ID assigned by the subclonal reconstruction (PyClone / CONIPHER).
-      Numeric; used to link mutations to clones on the phylogeny.
-    null_semantics: unknown
+      CONIPHER cluster ID (also called 'clone' informally, though strictly a
+      cluster is not always a clone). Integer when the mutation was used in
+      clustering; NaN when it was not (mutation still detected, but excluded
+      from subclonal reconstruction).
+      Clustering is per patient_tumour: cluster IDs are unique within a tumour,
+      NOT across tumours or across patients.
+    null_semantics: not_applicable   # NaN = mutation excluded from clustering
   - name: clean_cluster
     type: BOOLEAN
     description: Cluster passed cleaning/QC.
     notes: "Rule TBC."
   - name: tree_cluster
     type: BOOLEAN
-    description: Cluster is retained in the final tree.
-    notes: "Rule TBC."
+    description: |
+      TRUE = cluster was placed on the final CONIPHER tree.
+      FALSE = cluster could not be fit onto the tree (pigeonhole or similar
+        principle violations). Mutations are still real detections and usable
+        for some analyses, but *not* for analyses that require the cluster's
+        position on the tree — including pre/post-WGD stratification.
+      NaN = clustering not applicable (mutation_cluster is NaN).
+    null_semantics: not_applicable
   - name: tree_cn_removed_cluster
     type: BOOLEAN
-    description: Cluster was removed after copy-number-aware tree correction.
-    notes: "Rule TBC."
+    description: |
+      TRUE = cluster was removed from the tree for copy-number reasons.
+      NaN = not applicable. Mutations from such clusters should generally be
+      excluded from CN-sensitive analyses.
+    null_semantics: not_applicable
   - name: is_cn_fail
     type: BOOLEAN
     description: Mutation failed a copy-number-based QC.
@@ -408,22 +426,30 @@ columns:
     description: Mutation is expressed at RNA level in ≥1 sample of the patient/tumour.
     null_semantics: not_measured
 
+scope_notes: |
+  Some entities in this cohort are per-PATIENT, others per-TUMOUR. Some patients
+  have multiple tumours, encoded in `patient_tumour` (e.g. `LTX0001_tumour2`).
+  - PER-TUMOUR: clustering, phylogeny, WGD calls (via PGDD on the tumour tree),
+    mutation aggregates like max_vaf.
+  - PER-PATIENT: clinical outcomes (survival), demographics.
+  Join carefully: never join a per-patient metric to a per-tumour analysis
+  without picking a rule for multi-tumour patients (e.g. drop, first tumour,
+  worst tumour).
+
 relationships:
   # To be filled in as we catalog the sibling tables.
   - column: patient_id
-    references: patients.patient_id     # TBC
+    references: patients.patient_id     # per-patient (TBC)
   - column: patient_tumour
-    references: tumours.patient_tumour  # TBC
+    references: tumours.patient_tumour  # per-tumour  (TBC)
   - column: sample_name_hash
-    references: samples.sample_name_hash  # TBC
+    references: samples.sample_name_hash  # per-region (TBC)
   - column: mutation_cluster
-    references: mutation_clusters.mutation_cluster  # per patient_tumour — TBC
+    references: mutation_clusters.mutation_cluster  # unique within patient_tumour (TBC)
 
 open_questions:
-  - "Genome build: hg19 or hg38? (Coordinates alone don't disambiguate.)"
   - "Exact definition of `pos` and how it differs from `start` on indels/MNVs."
-  - "Definition of CALLED vs PASS."
-  - "Value set for `timing` and its exact derivation rule (MutationTimeR-based?)."
   - "Value set for `ith_state`, `ith_state_ambiguity1`, `driver_category`, `ffpe_confidence`."
-  - "Definitions of QC booleans: `clean_cluster`, `tree_cluster`, `tree_cn_removed_cluster`, `is_cn_fail`, `is_homogen*`, `is_artefact_sig_fail`, `is_deleterious`."
+  - "Definitions of QC booleans: `clean_cluster`, `is_cn_fail`, `is_homogen*`, `is_artefact_sig_fail`, `is_deleterious`."
   - "Confirm meaning of `max_var_count`, `min_depth`, `max_vaf` aggregates."
+  - "Origin/rule for the `timing` column."
