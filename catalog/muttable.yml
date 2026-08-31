@@ -71,8 +71,13 @@ columns:
   - name: mutation_id
     type: VARCHAR
     description: |
-      Unique mutation identifier per patient/tumour. Format observed:
-      {patient}_{tumour}:{chr}:{pos}:{ref}:{alt}, e.g. LTX0100_1:10:105200138:C:G.
+      Unique mutation identifier per patient/tumour. Format:
+      {patient}_{tumour_ordinal}:{chr}:{pos}:{ref}:{var}
+      Examples:
+        SNV       LTX0100_1:10:105200138:C:G
+        Deletion  LTX0001_1:10:99003980:A:-
+      NOTE: uses `pos` (left-anchor for indels), NOT `start`. For deletions this
+      means `mutation_id` refers to the base BEFORE the deleted region.
     null_semantics: unknown
 
   # ---- locus ----
@@ -82,25 +87,39 @@ columns:
     null_semantics: unknown
   - name: start
     type: BIGINT
-    description: Genomic start position (1-based, inclusive — confirm).
+    description: |
+      Genomic start position of the variant, 1-based. For SNVs and deletions
+      of length N, `stop = start + N - 1` (i.e. the last deleted base).
     null_semantics: unknown
   - name: stop
     type: BIGINT
-    description: Genomic stop position. For SNVs equals `start`; for indels/MNVs may differ.
+    description: |
+      Genomic stop position. For SNVs equals `start`. For deletions marks the
+      last deleted base.
     null_semantics: unknown
   - name: pos
     type: BIGINT
     description: |
-      Position column, appears redundant with `start` in the observed SNV rows.
-      May differ for complex variants. TODO confirm meaning.
-    notes: "Possibly redundant with `start` for SNVs; behaviour on indels TBC."
+      "Left-anchor" position used to build `mutation_id`. For SNVs, pos == start.
+      For DELETIONS, `pos == start - 1` (VCF-style left anchor — the base
+      immediately preceding the deletion).
+      For INSERTIONS: TBC (need an insertion example). Likely also pos == start - 1
+      following VCF convention.
+      **`mutation_id` is built from `pos`, NOT from `start`** — see `mutation_id`.
+    notes: "Used as the join key when a canonical mutation_id is needed."
   - name: ref
     type: VARCHAR
-    description: Reference allele.
+    description: |
+      Reference allele. For SNVs, one base. For deletions, the deleted bases
+      (e.g. `A` for a single-base deletion). For insertions: TBC — likely `-`
+      following the null-marker convention used for deletions' `var`.
     null_semantics: unknown
+    notes: "The `-` character is used as the null-allele marker on the opposite side of the indel."
   - name: var
     type: VARCHAR
-    description: Variant (alternate) allele.
+    description: |
+      Variant (alternate) allele. For SNVs, one base. For DELETIONS, `-` (the
+      null-allele marker). For INSERTIONS: presumably the inserted bases — TBC.
     null_semantics: unknown
 
   # ---- per-sample calling evidence ----
@@ -192,7 +211,10 @@ columns:
     null_semantics: not_applicable
   - name: func_refgene
     type: VARCHAR
-    description: Annovar Func.refGene (e.g. exonic, intronic, splicing, UTR3, UTR5, intergenic).
+    description: |
+      Annovar Func.refGene. Observed values so far: exonic, ncRNA_intronic.
+      Standard Annovar set also includes: intronic, splicing, UTR3, UTR5,
+      intergenic, upstream, downstream, ncRNA_exonic, ncRNA_splicing.
     null_semantics: not_applicable
   - name: aachange_refgene
     type: VARCHAR
@@ -448,7 +470,7 @@ relationships:
     references: mutation_clusters.mutation_cluster  # unique within patient_tumour (TBC)
 
 open_questions:
-  - "Exact definition of `pos` and how it differs from `start` on indels/MNVs."
+  - "Insertion encoding: does `ref == '-'`, `pos == start - 1`? Need an insertion example to confirm."
   - "Value set for `ith_state`, `ith_state_ambiguity1`, `driver_category`, `ffpe_confidence`."
   - "Definitions of QC booleans: `clean_cluster`, `is_cn_fail`, `is_homogen*`, `is_artefact_sig_fail`, `is_deleterious`."
   - "Confirm meaning of `max_var_count`, `min_depth`, `max_vaf` aggregates."

@@ -57,12 +57,19 @@ joins:
     on:
       - "alphamissense.tumour_id = normalise_tumour_id(muttable.patient_tumour)"
       - "alphamissense.chr       = muttable.chr"
-      - "alphamissense.pos       = muttable.start"   # for SNVs; indel handling TBC
+      - "alphamissense.pos       = muttable.start   -- for SNVs"
+      - "alphamissense.pos       = muttable.pos     -- possibly for indels; TBC (see below)"
       - "alphamissense.alt       = muttable.var"
     notes: |
       Ref allele is NOT emitted by VEP output; join is on (chr, pos, alt).
-      This is safe for SNVs (biallelic assumption); may need extra care for
-      indels/MNVs. Verify with a spot check on a mixed-variant sample.
+      Safe for SNVs (biallelic assumption).
+
+      **Indel join key TBC.** In muttable, indels have `pos = start - 1`
+      (VCF-style left anchor) — for a deletion at chr10:99003981 (start),
+      pos == 99003980. The VCF that was fed to VEP could have used either
+      `start` or `pos`; we haven't seen an AlphaMissense indel row yet to
+      confirm. Need a spot check: pick a deletion from muttable, look up its
+      corresponding row in the per-tumour AM file, see which coordinate matches.
 
       `Uploaded_variation` from VEP is the input VCF's ID column, which in this
       pipeline is set to the tumour_id string (e.g. `LTX0001_1`) — it does NOT
@@ -230,6 +237,6 @@ relationships:
     references: genes.ensembl_gene_id                 # TBC — future gene table
 
 open_questions:
-  - "How are indels represented in `Location` and `Allele`? (SNV example is clean; need to see an indel row to confirm join logic.)"
+  - "Indel join key: does VEP `Location` use muttable's `start` or `pos` (start-1) for deletions/insertions? Need one AM indel row to lock this in."
   - "Every file has per-sample duplicated rows (same variant × transcript repeated ~N_samples times). Confirm this is a byproduct of feeding the raw muttable through VEP without dedup, and dedup-on-load is safe."
   - "For a variant hit by multiple `missense_variant` rows on different transcripts with DIFFERENT am_pathogenicity scores, is there a canonical-transcript column we should use instead of the current fallback rule (lowest ENST ID)? Ensembl MANE Select would be the standard choice."
