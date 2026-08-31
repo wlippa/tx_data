@@ -41,7 +41,7 @@ filters_of_interest:
   coding_only: "func_refgene == 'exonic'"
   snv_only: "is_snv == True"
 
-genome_build: hg19     # confirmed 2026-08-31; downstream analysis targets hg38 → liftover step needed
+genome_build: hg19     # confirmed 2026-08-31. Future hg38 muttable will replace this file entirely (no liftover in-pipeline).
 chr_prefix: false      # values are '10', not 'chr10'
 
 columns:
