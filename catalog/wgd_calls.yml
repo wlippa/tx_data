@@ -68,27 +68,37 @@ id_normalisation:
   # TODO revisit if downstream code has strong preference for the muttable form.
 
 filters_of_interest:
-  high_quality: "quality == 'High'"
-  resolved: "status == 'resolved'"
+  # HARD FILTER for any downstream analysis: only `resolved` tumours are
+  # analytically usable. Unresolved / needs_follow_up rows must be dropped.
+  analysis_usable: "status == 'resolved'"
+  high_quality: "quality == 'High'"          # advisory, not a hard filter
   clonal_wgd_tumours: "class == 'clonal_wgd'"
-  subclonal_wgd_tumours: "class == 'subclonal_wgd'"    # value TBC
-  no_wgd_tumours: "total_gds_per_tumour == 0"
+  subclonal_wgd_mut_supported: "class == 'mut_supported'"    # subclonal WGD, PGDD-mutation-supported
+  subclonal_wgd_ploidy_only: "class == 'ploidy_only'"        # subclonal WGD, CN-only placement (weaker)
+  no_wgd_tumours: "class == 'no_wgd'"
 
 derived_columns:
   # Not in source; computed by the loader for convenience.
   - name: is_root
-    description: "TRUE when parent == 'diploid'. The root clone has no in-tumour ancestor."
+    description: "TRUE when parent == 'diploid'. The MRCA clone."
     rule: "parent == 'diploid'"
   - name: is_wgd_event_clone
-    description: "TRUE when a WGD event is placed on the branch INTO this clone."
+    description: "TRUE when at least one WGD event is placed on the branch INTO this clone."
     rule: "number_of_gds_at_clone > 0"
+  - name: cumulative_gds_to_clone
+    description: |
+      Sum of `number_of_gds_at_clone` along the parent chain from this clone
+      back to the MRCA (inclusive of self). = "how many WGDs happened in this
+      clone's lineage from diploid up to and including this clone".
+    rule: "sum(number_of_gds_at_clone for clone in ancestors(self) + [self])"
   - name: has_wgd_ancestor
-    description: "TRUE when this clone OR any ancestor has a WGD event. Requires tree traversal."
-    rule: "transitive OR of is_wgd_event_clone along parent chain to root"
-    notes: |
-      This is the per-clone label that drives pre/post-WGD stratification of
+    description: |
+      TRUE when this clone OR any ancestor has a WGD event.
+      = cumulative_gds_to_clone > 0.
+      This is the per-clone label driving pre/post-WGD stratification of
       mutations. Post-WGD mutations = mutations in clones where
       has_wgd_ancestor is TRUE.
+    rule: "cumulative_gds_to_clone > 0"
 
 columns:
   - name: tumour_id
@@ -123,9 +133,13 @@ columns:
     type: INTEGER
     description: |
       Number of whole-genome-doubling events placed on the branch INTO this
-      clone. Typically 0 or 1; higher values encode parallel/multiple WGDs
-      concentrated on the same branch.
-      Sum across all clones of a tumour = total_gds_per_tumour.
+      clone. Can be > 1 — e.g. value 2 at the MRCA means two clonal WGDs at
+      the same location. Sum across all clones of a tumour = total_gds_per_tumour.
+
+      To determine how many WGDs occurred UP TO clone X (i.e. in X's ancestry
+      including X itself), sum `number_of_gds_at_clone` along the parent chain
+      from X back to the MRCA. Computed by the loader as `cumulative_gds_to_clone`
+      (see derived_columns).
     null_semantics: not_applicable
 
   - name: total_gds_per_tumour
@@ -133,36 +147,57 @@ columns:
     description: |
       Total number of WGD events in this tumour, summed across all clones.
       Constant across all rows sharing the same tumour_id.
+      Example: 1 clonal WGD + 2 parallel subclonal WGDs → total = 3.
       Value 0 = tumour has no WGD anywhere.
     null_semantics: not_applicable
 
   - name: quality
     type: VARCHAR
-    description: WGD-call quality tier (observed: 'High'; other tiers TBC).
-    allowed_values: [High]   # extend as observed
+    description: |
+      WGD-call quality tier. Currently {'High', 'Low'} but the value set may
+      grow. **'Low' calls are still analytically acceptable** — this flag is
+      an advisory to help spot suspicious cases, not a hard filter.
+    allowed_values: [High, Low]
     null_semantics: unknown
 
   - name: status
     type: VARCHAR
     description: |
-      Status of the WGD placement (observed: 'resolved'; other values TBC —
-      likely candidates include 'ambiguous', 'unresolved').
-    allowed_values: [resolved]   # extend as observed
+      Status of the WGD placement. **HARD FILTER:** only `resolved` rows are
+      usable in any downstream analysis. Unresolved and needs_follow_up rows
+      must be excluded.
+    allowed_values: [resolved, unresolved, needs_follow_up]
     null_semantics: unknown
+    notes: "This is the mandatory analytical filter for this table."
 
   - name: class
     type: VARCHAR
     description: |
-      Top-level WGD classification for the tumour (observed: 'clonal_wgd';
-      likely other values: 'subclonal_wgd', 'parallel_wgd', 'no_wgd').
-      Constant across all rows sharing the same tumour_id.
-    allowed_values: [clonal_wgd]   # extend as observed
-    null_semantics: unknown
+      Top-level WGD classification for the whole TUMOUR (constant across all
+      clones of the same tumour_id). Values:
+        - 'clonal_wgd'    : one or more clonal WGDs, no subclonal WGDs
+        - 'mut_supported' : ≥1 subclonal WGD, supported by mutations (PGDD)
+        - 'ploidy_only'   : ≥1 subclonal WGD, placement inferred from copy
+                            number ONLY (no mutation support) — weaker call,
+                            downstream pre/post-WGD labelling less reliable
+        - 'no_wgd'        : no doubling detected anywhere in the tumour
+        - NaN             : tumour not yet resolved — filter out via `status`
+    allowed_values: [clonal_wgd, mut_supported, ploidy_only, no_wgd]
+    null_semantics: unknown   # NaN = unresolved
+    notes: "NaN rows should already be excluded by the `status == 'resolved'` filter."
 
   - name: sub_class
     type: VARCHAR
-    description: Finer-grained WGD classification (empty in observed rows).
-    null_semantics: unknown
+    description: |
+      WGD-pattern refinement for the whole TUMOUR. Values:
+        - 'parallel only'        : subclonal WGDs occur only on parallel branches
+        - 'sequential only'      : all WGDs sit on a single path from MRCA to a leaf
+        - 'parallel + sequential': mixed pattern
+        - 'single subclonal GD'  : exactly one subclonal WGD, no parallelism
+        - NaN                    : tumour is unresolved OR class is 'clonal_wgd' /
+                                   'no_wgd' (no subclonal pattern to describe)
+    allowed_values: ["parallel only", "sequential only", "parallel + sequential", "single subclonal GD"]
+    null_semantics: not_applicable    # NaN is expected for clonal_wgd / no_wgd / unresolved
 
 relationships:
   - column: tumour_id
@@ -178,7 +213,4 @@ scope_notes: |
   patient level without an explicit rule.
 
 open_questions:
-  - "Full value set for `class` and `sub_class` (need to see a subclonal_wgd / parallel_wgd / no_wgd example)."
-  - "Full value set for `status` and `quality`."
-  - "For tumours with total_gds_per_tumour > 1, are the events always on independent branches (parallel WGD), or can two events stack on one branch (number_of_gds_at_clone > 1)?"
-  - "Are there tumours in the cohort that have NO row in this file (i.e. wasn't run through WGD calling)? If so, how do we distinguish 'not run' from 'run and found no WGD'?"
+  - "Are there tumours in the cohort that have NO row in this file at all (WGD calling didn't run vs ran and found none)? no_wgd tumours DO get rows with class='no_wgd', so the ambiguity is only for tumours that appear in muttable but not here."
