@@ -57,7 +57,15 @@ sources:
       GRCh37 assets. Loader dedupes to (tumour × variant × transcript),
       then picks a canonical transcript per variant for scoring.
 
-  # Populated as more tables are received.
-  # samples: {...}
-  # cn_segments: {...}
-  # clinical: {...}
+  clinical:
+    relative_path: tx842_clinical.tsv
+    format: tsv
+    header: true
+    null_marker: "NA"
+    received: 2026-08-31
+    notes: |
+      Per-patient. Multi-tumour patients encode two lesions on one row
+      (histology1_ / histology2_); loader unpivots to per-tumour view.
+      Does NOT contain purity, ploidy, TP53 status, mutation signatures, or
+      survival time-to-event columns — those live elsewhere (TBC) or must
+      be derived.
