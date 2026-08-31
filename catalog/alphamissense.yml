@@ -32,14 +32,14 @@ provenance:
 
 primary_key:
   # Raw source: one row per (tumour × variant × transcript × input-VCF-row).
-  # After the loader's canonical dedup step, primary key is:
+  # For the AM score dedup used by downstream analysis, primary key is:
   - tumour_id
   - chr
   - pos
   - alt
-  - transcript_id
 grain_source: one row per (tumour × variant × transcript × input-VCF-row) — includes per-sample duplicates from the input VCF
-grain_canonical: one row per (tumour × variant × transcript) after dedup
+grain_scored: one row per (tumour × variant) — one am_pathogenicity per mutation, all transcripts collapsed
+grain_transcript: one row per (tumour × variant × transcript) — if per-transcript annotation is ever needed
 
 genome_build: hg19    # confirmed via VEP header (GRCh37.p13, AlphaMissense_hg19.tsv.gz)
 chr_prefix: false     # Location values are "10:105200138", not "chr10:..."
@@ -73,19 +73,25 @@ joins:
       identify individual mutations. Do not use it as a join key.
 
 canonical_transcript_selection:
-  # Multiple transcript rows per variant are the norm in VEP output.
-  # For AlphaMissense scoring, we want one score per variant.
+  # Multiple transcript rows per variant are the norm in VEP output. For AM
+  # SCORING specifically, the picture is simpler than it looks: confirmed
+  # 2026-08-31 that the same variant at the same location has the SAME
+  # am_pathogenicity across every transcript that scores it (AM is variant-
+  # level, not transcript-level, in practice).
   rule: |
-    Prefer, in order:
-      1. Row with Consequence == 'missense_variant' AND non-null am_pathogenicity.
-      2. Ties broken by: FLAGS mentions 'canonical' (VEP --pick), else lowest
-         ENST transcript ID (deterministic tie-break — replace with MANE Select
-         lookup when we bring in a canonical-transcript table).
-    Non-missense variants (splice, upstream/downstream, etc.) never get an AM
-    score — dedup keeps them but leaves am_pathogenicity NULL.
+    For AM score dedup:
+      Group by (tumour_id, chr, pos, alt); take any non-null am_pathogenicity
+      value — all rows within the group that carry a score agree. Non-missense
+      transcripts (splice, up/downstream, intronic) leave am_pathogenicity NULL
+      and are ignored by the score picker.
+
+    For gene/transcript-level annotation (if ever needed downstream):
+      Keep the full per-transcript rows as a separate view. Not needed for the
+      mut_essential_wgd project — we only need one AM score per mutation.
   notes: |
-    Long-term better rule: join to a MANE Select / Ensembl canonical transcript
-    reference and pick the canonical transcript per gene. Deferred.
+    No MANE Select / canonical-transcript lookup required for scoring, since
+    scores don't vary by transcript. The dedup can therefore be a straight
+    MAX/FIRST on am_pathogenicity within the group.
 
 filters_of_interest:
   scored_missense: "Consequence LIKE '%missense_variant%' AND am_pathogenicity IS NOT NULL"
@@ -235,6 +241,8 @@ relationships:
   - column: Gene
     references: genes.ensembl_gene_id                 # TBC — future gene table
 
-open_questions:
-  - "Every file has per-sample duplicated rows (same variant × transcript repeated ~N_samples times). Confirm this is a byproduct of feeding the raw muttable through VEP without dedup, and dedup-on-load is safe."
-  - "For a variant hit by multiple `missense_variant` rows on different transcripts with DIFFERENT am_pathogenicity scores, is there a canonical-transcript column we should use instead of the current fallback rule (lowest ENST ID)? Ensembl MANE Select would be the standard choice."
+open_questions: []
+# Resolved 2026-08-31:
+#   - Sample-level dedup is safe (force-calling puts every mutation in every sample).
+#   - AM scores are variant-level, identical across transcripts — no canonical
+#     transcript lookup needed for AM scoring.
