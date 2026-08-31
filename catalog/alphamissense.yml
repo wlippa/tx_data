@@ -1,0 +1,235 @@
+name: alphamissense
+description: |
+  AlphaMissense pathogenicity annotations for Tx842 mutations, produced by
+  running Ensembl VEP (v115.2) with the AlphaMissense plugin on the muttable
+  variants. One file per tumour, one row per (variant × VEP transcript
+  annotation), so multiple rows per mutation are expected (one per affected
+  transcript, and often duplicated by the sample-level rows in the input VCF).
+
+  Downstream: dedupe to per-variant, then pick a single "canonical" transcript
+  row for scoring — typically the missense_variant row on the canonical /
+  MANE-Select transcript.
+
+provenance:
+  cohort: TRACERx 842 (Tx842)
+  hpc_source_pattern: /nemo/project/proj-tracerx-lung/tctProjects/CN-CCF/alphamissense/annotated_muttables/tx842/<tumour_id>/<tumour_id>_muttable_annotated.tsv
+  format_on_source: TSV, VEP output. First many lines are `##` comment metadata; the header row starts with a single `#` (`#Uploaded_variation ...`).
+  received: 2026-08-31
+  received_via: example file for LTX0001-Tumour1 sent by Odysseus
+  canonical_format: Parquet (after build script; comment lines stripped, per-mutation dedup)
+  pipeline: |
+    Input VCF built from muttable (per tumour). Fed through VEP:
+      vep --assembly GRCh37 --cache --database 0 --dir_cache <asset_dir>
+          --dir_plugins /plugins
+          --input_file <tumour_id>_muttable.vcf
+          --offline
+          --output_file <tumour_id>_muttable_annotated.tsv
+          --plugin AlphaMissense,file=<asset_dir>/AlphaMissense_hg19.tsv.gz
+          --tab
+    Assets:
+      - AlphaMissense_hg19.tsv.gz (thresholds: benign<0.34, ambiguous 0.34–0.564, pathogenic>0.564)
+      - Ensembl cache GRCh37.p13, GENCODE 19, dbSNP 156, COSMIC 98, ClinVar 202306, gnomADe/g v4.1
+
+primary_key:
+  # Raw source: one row per (tumour × variant × transcript × input-VCF-row).
+  # After the loader's canonical dedup step, primary key is:
+  - tumour_id
+  - chr
+  - pos
+  - alt
+  - transcript_id
+grain_source: one row per (tumour × variant × transcript × input-VCF-row) — includes per-sample duplicates from the input VCF
+grain_canonical: one row per (tumour × variant × transcript) after dedup
+
+genome_build: hg19    # confirmed via VEP header (GRCh37.p13, AlphaMissense_hg19.tsv.gz)
+chr_prefix: false     # Location values are "10:105200138", not "chr10:..."
+null_marker: "-"      # VEP uses "-" for missing values in every column
+file_layout:
+  comment_prefix: "##"                    # skip lines starting with ##
+  header_line_prefix: "#"                 # the header line starts with a single #
+  header_column_prefix_to_strip: "#Uploaded_variation"  # strip leading # from first column name
+
+per_tumour_files: true
+tumour_id_form_in_path: "LTX0001-Tumour1"  # matches wgd_calls canonical form; NOT muttable's LTX0001_tumour1
+
+joins:
+  muttable:
+    on:
+      - "alphamissense.tumour_id = normalise_tumour_id(muttable.patient_tumour)"
+      - "alphamissense.chr       = muttable.chr"
+      - "alphamissense.pos       = muttable.start"   # for SNVs; indel handling TBC
+      - "alphamissense.alt       = muttable.var"
+    notes: |
+      Ref allele is NOT emitted by VEP output; join is on (chr, pos, alt).
+      This is safe for SNVs (biallelic assumption); may need extra care for
+      indels/MNVs. Verify with a spot check on a mixed-variant sample.
+
+      `Uploaded_variation` from VEP is the input VCF's ID column, which in this
+      pipeline is set to the tumour_id string (e.g. `LTX0001_1`) — it does NOT
+      identify individual mutations. Do not use it as a join key.
+
+canonical_transcript_selection:
+  # Multiple transcript rows per variant are the norm in VEP output.
+  # For AlphaMissense scoring, we want one score per variant.
+  rule: |
+    Prefer, in order:
+      1. Row with Consequence == 'missense_variant' AND non-null am_pathogenicity.
+      2. Ties broken by: FLAGS mentions 'canonical' (VEP --pick), else lowest
+         ENST transcript ID (deterministic tie-break — replace with MANE Select
+         lookup when we bring in a canonical-transcript table).
+    Non-missense variants (splice, upstream/downstream, etc.) never get an AM
+    score — dedup keeps them but leaves am_pathogenicity NULL.
+  notes: |
+    Long-term better rule: join to a MANE Select / Ensembl canonical transcript
+    reference and pick the canonical transcript per gene. Deferred.
+
+filters_of_interest:
+  scored_missense: "Consequence LIKE '%missense_variant%' AND am_pathogenicity IS NOT NULL"
+  likely_pathogenic: "am_class == 'pathogenic'"     # VEP's plugin renames 'Likely pathogenic' → 'pathogenic'
+  likely_benign:     "am_class == 'benign'"
+  ambiguous:         "am_class == 'ambiguous'"
+
+columns:
+  # ---- identity ----
+  - name: Uploaded_variation
+    type: VARCHAR
+    description: |
+      VCF ID column from the input to VEP. In this pipeline it's set to the
+      tumour identifier (e.g. `LTX0001_1`), constant across all rows of a file.
+      NOT a per-mutation ID — do not use as a join key.
+    null_semantics: not_applicable
+  - name: Location
+    type: VARCHAR
+    description: |
+      "chr:pos" or "chr:start-end". No 'chr' prefix. Parsed into `chr` and
+      `pos` columns by the loader.
+    null_semantics: not_applicable
+  - name: Allele
+    type: VARCHAR
+    description: The variant (alt) allele. Also stored as `alt` after dedup.
+    null_semantics: not_applicable
+  - name: Gene
+    type: VARCHAR
+    description: Ensembl gene stable ID (ENSG...) of the affected gene.
+    null_semantics: measured_as_absent
+
+  # ---- transcript annotation ----
+  - name: Feature
+    type: VARCHAR
+    description: Ensembl feature stable ID — usually a transcript (ENST...).
+    null_semantics: measured_as_absent
+  - name: Feature_type
+    type: VARCHAR
+    description: Feature type — usually 'Transcript'. Also RegulatoryFeature / MotifFeature.
+    null_semantics: not_applicable
+  - name: Consequence
+    type: VARCHAR
+    description: |
+      Comma-separated VEP consequence terms (SO ontology). Values seen so far:
+      missense_variant, upstream_gene_variant, downstream_gene_variant,
+      splice_acceptor_variant.
+    null_semantics: not_applicable
+
+  # ---- coding coordinates ----
+  - name: cDNA_position
+    type: VARCHAR
+    description: Position in the cDNA sequence (may be a range, hence VARCHAR).
+    null_semantics: not_applicable
+  - name: CDS_position
+    type: VARCHAR
+    description: Position in the CDS.
+    null_semantics: not_applicable
+  - name: Protein_position
+    type: VARCHAR
+    description: Position of the affected amino acid in the protein.
+    null_semantics: not_applicable
+  - name: Amino_acids
+    type: VARCHAR
+    description: "Reference/variant amino acid (e.g. 'L/V')."
+    null_semantics: not_applicable
+  - name: Codons
+    type: VARCHAR
+    description: "Reference/variant codon (e.g. 'Ctt/Gtt')."
+    null_semantics: not_applicable
+
+  # ---- variant metadata ----
+  - name: Existing_variation
+    type: VARCHAR
+    description: Co-located known variant IDs (dbSNP, COSMIC, etc.). Comma-separated.
+    null_semantics: measured_as_absent
+  - name: IMPACT
+    type: VARCHAR
+    description: |
+      VEP's subjective impact tier for the consequence. One of:
+      HIGH, MODERATE, LOW, MODIFIER.
+    allowed_values: [HIGH, MODERATE, LOW, MODIFIER]
+    null_semantics: not_applicable
+  - name: DISTANCE
+    type: INTEGER
+    description: Shortest distance from the variant to the transcript (for up/downstream variants).
+    null_semantics: not_applicable
+  - name: STRAND
+    type: INTEGER
+    description: Strand of the feature (1 or -1).
+    null_semantics: not_applicable
+  - name: FLAGS
+    type: VARCHAR
+    description: Transcript quality flags (e.g. 'canonical', 'cds_start_NF').
+    null_semantics: measured_as_absent
+
+  # ---- AlphaMissense ----
+  - name: am_class
+    type: VARCHAR
+    description: |
+      AlphaMissense discrete class. VEP plugin renames the AlphaMissense
+      author strings — observed values in this file: 'benign', 'ambiguous',
+      'pathogenic' (mapping to 'Likely benign' / 'ambiguous' / 'Likely pathogenic'
+      in AM parlance).
+      NULL for non-missense variants (AM only scores missense).
+    allowed_values: [benign, ambiguous, pathogenic]
+    null_semantics: not_applicable
+  - name: am_pathogenicity
+    type: DOUBLE
+    description: |
+      Continuous AlphaMissense score in [0, 1] — predicted probability of the
+      variant being pathogenic. Author-recommended thresholds:
+        benign  < 0.34
+        ambiguous [0.34, 0.564]
+        pathogenic > 0.564
+      NULL for non-missense variants.
+    null_semantics: not_applicable
+
+  # ---- loader-derived columns (canonical form) ----
+  - name: tumour_id
+    type: VARCHAR
+    description: Parsed from the file path segment `<tumour_id>` (e.g. LTX0001-Tumour1). Not present in the file body.
+    derived: true
+  - name: chr
+    type: VARCHAR
+    description: Parsed from `Location` (before the ':'). No 'chr' prefix.
+    derived: true
+  - name: pos
+    type: BIGINT
+    description: Parsed from `Location` (after the ':'). Start position for ranged variants.
+    derived: true
+  - name: alt
+    type: VARCHAR
+    description: Alias of `Allele` for cleaner joins.
+    derived: true
+
+relationships:
+  # Note tumour_id normalisation — canonical form is `LTX0001-Tumour1`.
+  - column: tumour_id
+    references: tumours.tumour_id                     # TBC
+  - column: [tumour_id, chr, pos, alt]
+    references: [muttable.patient_tumour, muttable.chr, muttable.start, muttable.var]
+    notes: |
+      After tumour_id normalisation and, for SNVs, direct coordinate match.
+      Ref allele is not in AM file — biallelic assumption; verify for indels.
+  - column: Gene
+    references: genes.ensembl_gene_id                 # TBC — future gene table
+
+open_questions:
+  - "How are indels represented in `Location` and `Allele`? (SNV example is clean; need to see an indel row to confirm join logic.)"
+  - "Every file has per-sample duplicated rows (same variant × transcript repeated ~N_samples times). Confirm this is a byproduct of feeding the raw muttable through VEP without dedup, and dedup-on-load is safe."
+  - "For a variant hit by multiple `missense_variant` rows on different transcripts with DIFFERENT am_pathogenicity scores, is there a canonical-transcript column we should use instead of the current fallback rule (lowest ENST ID)? Ensembl MANE Select would be the standard choice."

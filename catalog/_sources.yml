@@ -15,6 +15,11 @@ cohort:
   id: Tx842
   human_name: TRACERx 842
   source_root_default: /nemo/project/proj-tracerx-lung/tctProjects/lungTx/Tx842/release/tracerx_842
+  # Optional per-table source_root overrides for assets that live outside the
+  # main release tree — resolves to `source_root: <root>` on the table entry.
+
+alt_source_roots:
+  cn_ccf_alphamissense: /nemo/project/proj-tracerx-lung/tctProjects/CN-CCF/alphamissense
 
 sources:
   muttable:
@@ -37,8 +42,22 @@ sources:
       Uses tumour_id spelling `LTX0001-Tumour1` (differs from muttable's
       `LTX0001_tumour1`); loader normalises.
 
+  alphamissense:
+    source_root: cn_ccf_alphamissense                  # from alt_source_roots
+    relative_path_pattern: "annotated_muttables/tx842/{tumour_id}/{tumour_id}_muttable_annotated.tsv"
+    format: tsv_vep                                    # tab-separated with `##` comment header
+    header: true
+    header_prefix: "#"                                 # header line starts with a single `#`
+    comment_prefix: "##"                               # metadata lines to skip
+    per_tumour: true
+    tumour_id_form: "LTX0001-Tumour1"
+    received: 2026-08-31
+    notes: |
+      One file per tumour. VEP v115.2 output with AlphaMissense plugin,
+      GRCh37 assets. Loader dedupes to (tumour × variant × transcript),
+      then picks a canonical transcript per variant for scoring.
+
   # Populated as more tables are received.
   # samples: {...}
   # cn_segments: {...}
-  # alphamissense: {...}
   # clinical: {...}
