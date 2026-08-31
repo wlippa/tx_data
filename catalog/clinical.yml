@@ -441,9 +441,11 @@ relationships:
 
 open_questions:
   - "Time-to-event survival columns (OS_time / OS_event / DFS_time / DFS_event) are NOT in this file. Is there a separate outcomes table?"
-  - "Per-sample or per-tumour PURITY and PLOIDY — this file has neither. Which file holds sample QC?"
   - "TP53 mutation status — do we compute this ourselves from muttable, or is there a canonical driver-status table?"
   - "Mutation signature exposures (SBS4 in particular) — separate file, or derive from muttable?"
   - "Value sets for `Relapse_cat_new`, `smoking_status`, `smoking_status_group`, `histology1/2_group_central.reviewed`."
   - "Rule for `pack_years_truncated` and `alcohol_years_truncated`."
-  - "How consistently is the Lesion1 vs Lesion2 mapping to Tumour1 vs Tumour2 (as used in muttable / wgd_calls)? Any edge cases where the numbering differs?"
+  - "**Collision tumours**: do any patients have multiple histologically-distinct primaries within one lesion, breaking the Lesion1→Tumour1 / Lesion2→Tumour2 assumption? Prototype treats it as clean 1:1; deferred for revisit. See mut_essential_wgd/notes/TODO.md."
+
+deferred:
+  - "Per-sample purity/ploidy: samples were rigorously QC'd upstream; no purity floor at prototype stage."
