@@ -57,19 +57,16 @@ joins:
     on:
       - "alphamissense.tumour_id = normalise_tumour_id(muttable.patient_tumour)"
       - "alphamissense.chr       = muttable.chr"
-      - "alphamissense.pos       = muttable.start   -- for SNVs"
-      - "alphamissense.pos       = muttable.pos     -- possibly for indels; TBC (see below)"
+      - "alphamissense.pos       = muttable.pos      -- works for both SNVs and indels"
       - "alphamissense.alt       = muttable.var"
     notes: |
       Ref allele is NOT emitted by VEP output; join is on (chr, pos, alt).
-      Safe for SNVs (biallelic assumption).
 
-      **Indel join key TBC.** In muttable, indels have `pos = start - 1`
-      (VCF-style left anchor) — for a deletion at chr10:99003981 (start),
-      pos == 99003980. The VCF that was fed to VEP could have used either
-      `start` or `pos`; we haven't seen an AlphaMissense indel row yet to
-      confirm. Need a spot check: pick a deletion from muttable, look up its
-      corresponding row in the per-tumour AM file, see which coordinate matches.
+      **Uniform join for SNVs and indels via muttable.pos**, confirmed 2026-08-31
+      by a deletion spot-check: for the deletion at muttable.start=99003981,
+      muttable.pos=99003980, the corresponding AM row's Location is
+      `10:99003980`. For SNVs, pos == start, so this join also works there.
+      Do NOT join on muttable.start — it would silently miss every indel.
 
       `Uploaded_variation` from VEP is the input VCF's ID column, which in this
       pipeline is set to the tumour_id string (e.g. `LTX0001_1`) — it does NOT
@@ -229,14 +226,15 @@ relationships:
   - column: tumour_id
     references: tumours.tumour_id                     # TBC
   - column: [tumour_id, chr, pos, alt]
-    references: [muttable.patient_tumour, muttable.chr, muttable.start, muttable.var]
+    references: [muttable.patient_tumour, muttable.chr, muttable.pos, muttable.var]
     notes: |
-      After tumour_id normalisation and, for SNVs, direct coordinate match.
-      Ref allele is not in AM file — biallelic assumption; verify for indels.
+      After tumour_id normalisation. Join uses muttable.pos (NOT muttable.start)
+      so the same key works for both SNVs and indels. Ref allele not in AM file;
+      biallelic assumption is safe here because the mutation set upstream is
+      already dedupped per (chr, pos, ref, alt).
   - column: Gene
     references: genes.ensembl_gene_id                 # TBC — future gene table
 
 open_questions:
-  - "Indel join key: does VEP `Location` use muttable's `start` or `pos` (start-1) for deletions/insertions? Need one AM indel row to lock this in."
   - "Every file has per-sample duplicated rows (same variant × transcript repeated ~N_samples times). Confirm this is a byproduct of feeding the raw muttable through VEP without dedup, and dedup-on-load is safe."
   - "For a variant hit by multiple `missense_variant` rows on different transcripts with DIFFERENT am_pathogenicity scores, is there a canonical-transcript column we should use instead of the current fallback rule (lowest ENST ID)? Ensembl MANE Select would be the standard choice."
