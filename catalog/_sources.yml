@@ -1,0 +1,34 @@
+# _sources.yml
+#
+# Registry of HPC source locations for each canonical table. Build scripts
+# read from here rather than hardcoding paths, so a build can be re-pointed
+# (e.g. from Tx842 to a future Tx900) by editing this one file.
+#
+# Path resolution:
+#   Effective source path = <TX_DATA_SOURCE_ROOT || config/paths.yml source_root> + relative_path
+#   For local development, the mocked equivalent lives in nemo_mock/<relative_path>.
+#
+# Filenames starting with `_` are treated as registry/metadata by catalog.load_all()
+# and are not loaded as table definitions.
+
+cohort:
+  id: Tx842
+  human_name: TRACERx 842
+  source_root_default: /nemo/project/proj-tracerx-lung/tctProjects/lungTx/Tx842/release/tracerx_842
+
+sources:
+  muttable:
+    relative_path: tx842_mutation_table.tsv.gz
+    format: tsv_gz
+    header: true
+    received: 2026-08-31
+    notes: |
+      Long format, one row per (mutation, sample) pair. Filter by is_present==True
+      for "actually detected in this sample".
+
+  # Populated as more tables are received.
+  # samples: {...}
+  # cn_segments: {...}
+  # pgdd_output: {...}
+  # trees: {...}
+  # clinical: {...}
