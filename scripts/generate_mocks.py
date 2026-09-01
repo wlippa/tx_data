@@ -242,6 +242,17 @@ def _assign_mutations(spec: TumourSpec) -> list[dict]:
     return muts
 
 
+# Cache per-tumour mutation lists so muttable and AlphaMissense share them.
+_MUTATIONS_CACHE: dict[str, list[dict]] = {}
+
+
+def _mutations_for(spec: TumourSpec) -> list[dict]:
+    key = spec.tumour_id_canonical
+    if key not in _MUTATIONS_CACHE:
+        _MUTATIONS_CACHE[key] = _assign_mutations(spec)
+    return _MUTATIONS_CACHE[key]
+
+
 def _write_muttable(specs: list[TumourSpec]) -> None:
     out = MOCK_ROOT / "tx842_mutation_table.tsv.gz"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -277,7 +288,7 @@ def _write_muttable(specs: list[TumourSpec]) -> None:
 
     rows = []
     for spec in specs:
-        muts = _assign_mutations(spec)
+        muts = _mutations_for(spec)
         sample_ids = [
             f"{spec.patient_id}_SU_T{spec.tumour_ordinal}-R{i + 1}--{RNG.randbytes(6).hex()}"
             for i in range(spec.n_samples)
@@ -508,7 +519,7 @@ def _write_alphamissense(specs: list[TumourSpec]) -> None:
     ]
 
     for spec in specs:
-        muts = _assign_mutations_snapshot(spec)
+        muts = _mutations_for(spec)
         tdir = AM_ROOT / spec.tumour_id_canonical
         tdir.mkdir(parents=True, exist_ok=True)
         out = tdir / f"{spec.tumour_id_canonical}_muttable_annotated.tsv"
@@ -553,18 +564,6 @@ def _write_alphamissense(specs: list[TumourSpec]) -> None:
                 ]))
         out.write_text("\n".join(lines) + "\n")
     print(f"wrote AM files for {len(specs)} tumours under {AM_ROOT}")
-
-
-def _assign_mutations_snapshot(spec: TumourSpec) -> list[dict]:
-    """Regenerate the same mutation list deterministically via a scoped RNG."""
-    global RNG
-    scratch_rng = random.Random(hash(spec.tumour_id_canonical) & 0xFFFFFFFF)
-    saved_rng = RNG
-    RNG = scratch_rng
-    try:
-        return _assign_mutations(spec)
-    finally:
-        RNG = saved_rng
 
 
 # --- Entry ------------------------------------------------------------------

@@ -42,6 +42,10 @@ def load_all_catalogs() -> dict[str, dict]:
     return out
 
 
+# Back-compat alias for pre-existing callers/tests.
+load_all = load_all_catalogs
+
+
 def catalog_column_names(name: str) -> list[str]:
     """Return the ordered list of source-schema column names for a table."""
     cat = load_catalog(name)

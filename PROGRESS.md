@@ -34,16 +34,32 @@ canonical store + synthetic `nemo_mock/` for local dev. Downstream projects
 | Catalog: alphamissense | ✅ | `catalog/alphamissense.yml` |
 | Catalog: clinical | ✅ | `catalog/clinical.yml` |
 | Sources registry | ✅ | `catalog/_sources.yml` |
-| Path resolver | ⏳ | `src/tx_data/paths.py` |
-| Catalog loader | ⏳ | `src/tx_data/catalog.py` |
-| Sources loader | ⏳ | `src/tx_data/sources.py` |
-| Normalise helpers | ⏳ | `src/tx_data/normalize.py` |
-| Build: muttable | ⏳ | `src/tx_data/builds/muttable.py` |
-| Build: wgd_calls | ⏳ | `src/tx_data/builds/wgd_calls.py` |
-| Build: alphamissense | ⏳ | `src/tx_data/builds/alphamissense.py` |
-| Build: clinical | ⏳ | `src/tx_data/builds/clinical.py` |
-| Mock generator | ⏳ | `scripts/generate_mocks.py` |
-| Tests | ⏳ | `tests/` |
+| Path resolver | ✅ | `src/tx_data/paths.py` |
+| Catalog loader | ✅ | `src/tx_data/catalog.py` |
+| Sources loader | ✅ | `src/tx_data/sources.py` |
+| Normalise helpers | ✅ | `src/tx_data/normalize.py` |
+| Build: muttable | ✅ | `src/tx_data/builds/muttable.py` |
+| Build: wgd_calls | ✅ | `src/tx_data/builds/wgd_calls.py` |
+| Build: alphamissense | ✅ | `src/tx_data/builds/alphamissense.py` |
+| Build: clinical | ✅ | `src/tx_data/builds/clinical.py` |
+| Mock generator | ✅ | `scripts/generate_mocks.py` |
+| Tests | ✅ | `tests/test_pipeline.py` (6 passing) |
+
+## How to run
+
+```bash
+cd projects/tx_data
+python3 -m venv .venv --without-pip && curl -sS https://bootstrap.pypa.io/get-pip.py | .venv/bin/python3
+.venv/bin/pip install polars pyyaml pyarrow pytest
+PYTHONPATH=src .venv/bin/python3 scripts/generate_mocks.py   # regenerate nemo_mock/
+PYTHONPATH=src .venv/bin/python3 scripts/build_all.py         # → data/*.parquet
+PYTHONPATH=src .venv/bin/python3 -m pytest tests/ -q
+```
+
+Mock cohort: 10 patients, 11 tumours. Covers every wgd_calls `class`
+(no_wgd, clonal_wgd, mut_supported, ploidy_only), sub_class (single, parallel,
+sequential), status (resolved, unresolved, needs_follow_up), a multi-tumour
+patient (LTX0008), and a tumour with `number_of_gds_at_clone == 2` at MRCA.
 
 Legend: ✅ done · ⏳ in progress or todo.
 

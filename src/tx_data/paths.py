@@ -13,7 +13,6 @@ declared there.
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 from pathlib import Path
 from typing import Mapping
 
@@ -24,7 +23,6 @@ DEFAULT_PATHS_YML = REPO_ROOT / "config" / "paths.yml"
 DEFAULT_MOCK_ROOT = REPO_ROOT / "nemo_mock"
 
 
-@lru_cache(maxsize=1)
 def data_root() -> Path:
     """Resolve the cohort source root."""
     env = os.environ.get("TX_DATA_ROOT")

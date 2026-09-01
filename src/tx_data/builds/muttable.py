@@ -32,6 +32,9 @@ def build() -> pl.DataFrame:
             canonical_tumour_id_expr("patient_tumour"),
             # Canonicalise clone (was float mutation_cluster).
             canonical_clone_expr("mutation_cluster"),
+            # Force chr to string so downstream joins with AM (which is string)
+            # work; also correct for X/Y/MT.
+            pl.col("chr").cast(pl.Utf8).alias("chr"),
         ]
     )
 
