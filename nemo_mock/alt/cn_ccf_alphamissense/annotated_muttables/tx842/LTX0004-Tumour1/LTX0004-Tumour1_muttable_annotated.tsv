@@ -1,0 +1,19 @@
+## ENSEMBL VARIANT EFFECT PREDICTOR v115.2 (mock)
+## assembly version GRCh37.p13
+## AlphaMissense plugin — thresholds benign<0.34, ambiguous, pathogenic>0.564
+#Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	DISTANCE	STRAND	FLAGS	am_class	am_pathogenicity
+LTX0004_1	2:198365176	C	ENSG00000115541	ENST00000000001	Transcript	synonymous_variant	100	100	34	L/L	Ctt/Ctc	-	LOW	-	1	-	-	-
+LTX0004_1	1:93297023	G	ENSG00000122406	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.3164
+LTX0004_1	11:75111635	C	ENSG00000149273	ENST00000000001	Transcript	synonymous_variant	100	100	34	L/L	Ctt/Ctc	-	LOW	-	1	-	-	-
+LTX0004_1	18:19195638	-	ENSG00000167088	ENST00000000001	Transcript	intron_variant	-	-	-	-	-	-	MODIFIER	-	-1	-	-	-
+LTX0004_1	12:25398029	T	ENSG00000133703	ENST00000000001	Transcript	stop_gained	100	100	34	R/*	Cga/Tga	-	HIGH	-	1	-	-	-
+LTX0004_1	11:14528720	C	ENSG00000129084	ENST00000000001	Transcript	synonymous_variant	100	100	34	L/L	Ctt/Ctc	-	LOW	-	1	-	-	-
+LTX0004_1	17:7577134	G	ENSG00000141510	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	pathogenic	0.6507
+LTX0004_1	10:99003745	G	ENSG00000213390	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.1634
+LTX0004_1	2:198365401	-	ENSG00000115541	ENST00000000001	Transcript	intron_variant	-	-	-	-	-	-	MODIFIER	-	-1	-	-	-
+LTX0004_1	12:25398838	G	ENSG00000133703	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	pathogenic	0.6916
+LTX0004_1	7:55086033	G	ENSG00000146648	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	pathogenic	0.8155
+LTX0004_1	18:19195864	G	ENSG00000167088	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.0289
+LTX0004_1	10:106039478	G	ENSG00000065621	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.2614
+LTX0004_1	10:120790358	G	ENSG00000107581	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.3381
+LTX0004_1	17:7389988	T	ENSG00000181222	ENST00000000001	Transcript	stop_gained	100	100	34	R/*	Cga/Tga	-	HIGH	-	1	-	-	-

@@ -1,0 +1,15 @@
+## ENSEMBL VARIANT EFFECT PREDICTOR v115.2 (mock)
+## assembly version GRCh37.p13
+## AlphaMissense plugin — thresholds benign<0.34, ambiguous, pathogenic>0.564
+#Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	DISTANCE	STRAND	FLAGS	am_class	am_pathogenicity
+LTX0010_1	1:93297717	C	ENSG00000122406	ENST00000000001	Transcript	synonymous_variant	100	100	34	L/L	Ctt/Ctc	-	LOW	-	1	-	-	-
+LTX0010_1	10:99003912	T	ENSG00000213390	ENST00000000001	Transcript	stop_gained	100	100	34	R/*	Cga/Tga	-	HIGH	-	1	-	-	-
+LTX0010_1	10:99003099	G	ENSG00000213390	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.1782
+LTX0010_1	10:120790535	G	ENSG00000107581	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.2454
+LTX0010_1	10:99003043	G	ENSG00000213390	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.3237
+LTX0010_1	10:106039583	-	ENSG00000065621	ENST00000000001	Transcript	intron_variant	-	-	-	-	-	-	MODIFIER	-	-1	-	-	-
+LTX0010_1	17:7577180	G	ENSG00000141510	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	pathogenic	0.6274
+LTX0010_1	11:14528169	-	ENSG00000129084	ENST00000000001	Transcript	intron_variant	-	-	-	-	-	-	MODIFIER	-	-1	-	-	-
+LTX0010_1	11:75111417	G	ENSG00000149273	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.2604
+LTX0010_1	18:19195561	G	ENSG00000167088	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.1325
+LTX0010_1	9:139036306	C	ENSG00000122140	ENST00000000001	Transcript	synonymous_variant	100	100	34	L/L	Ctt/Ctc	-	LOW	-	1	-	-	-

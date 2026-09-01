@@ -1,3 +1,7 @@
-# Default data root. Overridden by environment variable TX_DATA_ROOT.
-# Relative paths are resolved from the repo root.
+# Path config for tx_data.
+#
+# `data_root` is where the cohort source files live. `nemo_mock/` is the
+# default (synthetic mimic checked in for local dev). Override on the HPC:
+#   export TX_DATA_ROOT=/nemo/project/proj-tracerx-lung/tctProjects/lungTx/Tx842/release/tracerx_842
+
 data_root: nemo_mock
