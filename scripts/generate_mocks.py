@@ -566,6 +566,74 @@ def _write_alphamissense(specs: list[TumourSpec]) -> None:
     print(f"wrote AM files for {len(specs)} tumours under {AM_ROOT}")
 
 
+# --- Driver list ------------------------------------------------------------
+
+def _write_driver_list() -> None:
+    """Emit a synthetic TX842-shaped driver gene list.
+
+    Categorises our fixed gene panel:
+      - `TP53`, `KRAS`, `EGFR` → lung_mut_driver TRUE
+      - `MYC` → mut_driver TRUE but not lung-specific
+      - others → not drivers
+    """
+    out_dir = MOCK_ROOT / "drivers"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / "tx842_driver_gene_list.tsv"
+
+    header = [
+        "Hugo_Symbol", "gene_id", "driver_gene", "driver_role", "CGC_TIER",
+        "mut_driver", "lung_mut_driver", "mut_driver_source",
+        "CN_driver", "lung_CN_driver", "CNA_type", "CN_driver_source",
+        "chr_hg38", "start_hg38", "end_hg38", "cyto_hg38", "strand_hg38",
+        "chr_hg19", "start_hg19", "end_hg19", "cyto_hg19",
+        "SYNONYMS",
+    ]
+
+    lung_mut_drivers = {"TP53", "KRAS", "EGFR"}
+    pan_mut_drivers = lung_mut_drivers | {"MYC"}
+    lung_cn_drivers = {"MYC", "EGFR"}
+    cn_drivers = lung_cn_drivers | {"KRAS"}
+
+    lines = ["\t".join(header)]
+    for sym, chrom, start, ensembl, category in GENES:
+        is_lung_mut = sym in lung_mut_drivers
+        is_mut = sym in pan_mut_drivers
+        is_lung_cn = sym in lung_cn_drivers
+        is_cn = sym in cn_drivers
+        driver = is_mut or is_cn
+
+        role = {
+            "TP53": "tumor_suppressor",
+            "KRAS": "oncogene",
+            "EGFR": "oncogene",
+            "MYC":  "oncogene",
+        }.get(sym, "NA")
+
+        cgc_tier = "1" if sym in {"TP53", "KRAS", "EGFR", "MYC"} else "NA"
+        cna_type = "amp" if is_cn and sym != "TP53" else ("NA" if not is_cn else "del")
+
+        end = start + 990
+        lines.append("\t".join([
+            sym, ensembl,
+            "TRUE" if driver else "FALSE",
+            role,
+            cgc_tier,
+            "TRUE" if is_mut else "FALSE",
+            "TRUE" if is_lung_mut else "FALSE",
+            "CGC_v104" if is_mut else "NA",
+            "TRUE" if is_cn else "FALSE",
+            "TRUE" if is_lung_cn else "FALSE",
+            cna_type,
+            "CGC_v104" if is_cn else "NA",
+            f"chr{chrom}", str(start), str(end), f"{chrom}q00.0", "+",
+            f"chr{chrom}", str(start), str(end), f"{chrom}q00.0",
+            "NA",
+        ]))
+
+    out.write_text("\n".join(lines) + "\n")
+    print(f"wrote {out}")
+
+
 # --- Entry ------------------------------------------------------------------
 
 def main() -> None:
@@ -577,6 +645,7 @@ def main() -> None:
     _write_wgd_calls(specs)
     _write_clinical(specs)
     _write_alphamissense(specs)
+    _write_driver_list()
     print("done.")
 
 

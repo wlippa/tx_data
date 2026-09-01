@@ -69,3 +69,14 @@ sources:
       Does NOT contain purity, ploidy, TP53 status, mutation signatures, or
       survival time-to-event columns — those live elsewhere (TBC) or must
       be derived.
+
+  driver_list:
+    relative_path: drivers/tx842_driver_gene_list.tsv
+    format: tsv
+    header: true
+    null_marker: "NA"
+    received: 2026-09-01
+    notes: |
+      TRACERx-bespoke driver gene list. Recommended filter for SNV analyses
+      is `lung_mut_driver == TRUE`. Contains both hg19 and hg38 coordinates
+      (GENCODE v49). Replaces the earlier plan to use COSMIC CGC directly.
