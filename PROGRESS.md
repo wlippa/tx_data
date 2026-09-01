@@ -45,16 +45,19 @@ canonical store + synthetic `nemo_mock/` for local dev. Downstream projects
 | Mock generator | ✅ | `scripts/generate_mocks.py` |
 | Tests | ✅ | `tests/test_pipeline.py` (6 passing) |
 
-## How to run
+## How to run (pixi)
 
 ```bash
 cd projects/tx_data
-python3 -m venv .venv --without-pip && curl -sS https://bootstrap.pypa.io/get-pip.py | .venv/bin/python3
-.venv/bin/pip install polars pyyaml pyarrow pytest
-PYTHONPATH=src .venv/bin/python3 scripts/generate_mocks.py   # regenerate nemo_mock/
-PYTHONPATH=src .venv/bin/python3 scripts/build_all.py         # → data/*.parquet
-PYTHONPATH=src .venv/bin/python3 -m pytest tests/ -q
+pixi install       # once
+pixi run mocks     # regenerate nemo_mock/
+pixi run build     # → data/*.parquet
+pixi run test      # 12 tests, ~0.6s
+pixi run all       # all three, chained
 ```
+
+Cluster / HPC: pixi works there too; for the final production run we'll wrap
+this same env in an Apptainer container.
 
 Mock cohort: 10 patients, 11 tumours. Covers every wgd_calls `class`
 (no_wgd, clonal_wgd, mut_supported, ploidy_only), sub_class (single, parallel,

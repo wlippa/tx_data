@@ -17,10 +17,14 @@ TABLE = "clinical"
 
 _LESION_STEMS = [
     ("Lesion{n}_site_central.reviewed", "lesion_site"),
-    ("histology{n}_central.reviewed", "histology_detail"),
+    # PRIMARY histology column for our analyses is the detailed one
+    # (histology1_central.reviewed) per Odysseus 2026-09-01. The `group` one
+    # is kept as a coarser rollup.
+    ("histology{n}_central.reviewed", "histology"),
     ("histology{n}_group_central.reviewed", "histology_group"),
     ("pTStage_v8_lesion{n}_central.reviewed", "pT_stage"),
     ("pNStage_lesion{n}_central.reviewed", "pN_stage"),
+    # PRIMARY staging column: pTNMStage_v8_lesion1_central.reviewed → pTNM_stage.
     ("pTNMStage_v8_lesion{n}_central.reviewed", "pTNM_stage"),
     ("SizePath_lesion{n}_central.reviewed", "size_path_mm"),
     ("PathPleuInv_lesion{n}_central.reviewed", "pleural_invasion"),

@@ -231,11 +231,17 @@ columns:
     description: "Lesion 1 anatomical site (e.g. 'Right Upper Lobe')."
   - name: histology1_central.reviewed
     type: VARCHAR
-    description: "Lesion 1 detailed histology (e.g. 'Invasive adenocarcinoma')."
+    description: |
+      Lesion 1 detailed histology (e.g. 'Invasive adenocarcinoma').
+      **PRIMARY histology column** for downstream analyses per Odysseus
+      2026-09-01 — this is what unpivots to `histology` in
+      `clinical_per_tumour` and drives the histology-based cohort split.
   - name: histology1_group_central.reviewed
     type: VARCHAR
-    description: "Lesion 1 histology group. **Primary column for our cohort split.** Observed 'LUAD'; expect {LUAD, LUSC, other, mixed…} — full value set TBC."
-    notes: "This is the field that drives the histology-based cohort split in mut_essential_wgd."
+    description: |
+      Lesion 1 histology group. Coarser than histology1_central.reviewed.
+      Observed 'LUAD'; expect {LUAD, LUSC, other, mixed…} — full value set TBC.
+      Kept for rollups but NOT the primary column for filtering.
   - name: pTStage_v8_lesion1_central.reviewed
     type: VARCHAR
     description: Lesion 1 pT stage (AJCC v8).
@@ -244,7 +250,10 @@ columns:
     description: Lesion 1 pN stage.
   - name: pTNMStage_v8_lesion1_central.reviewed
     type: VARCHAR
-    description: Lesion 1 composite pTNM stage (AJCC v8).
+    description: |
+      Lesion 1 composite pTNM stage (AJCC v8). **PRIMARY staging column**
+      per Odysseus 2026-09-01 — unpivots to `pTNM_stage` in
+      `clinical_per_tumour`.
   - name: SizePath_lesion1_central.reviewed
     type: DOUBLE
     description: Lesion 1 pathological size (mm).
