@@ -39,6 +39,14 @@ def data_root() -> Path:
     return DEFAULT_MOCK_ROOT
 
 
+def data_root_is_mock() -> bool:
+    """True when `data_root()` is the repo-local mock tree (nemo_mock/)."""
+    try:
+        return data_root().resolve() == DEFAULT_MOCK_ROOT.resolve()
+    except OSError:
+        return False
+
+
 def _alt_root(alias: str, alt_source_roots: Mapping[str, str]) -> Path:
     """Resolve an alt-source-root alias to an absolute path.
 
