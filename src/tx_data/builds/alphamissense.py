@@ -33,7 +33,7 @@ def _read_am(p: Path) -> pl.DataFrame:
         source=p,
         separator="\t",
         null_values=["-"],
-        infer_schema_length=10000,
+        infer_schema_length=100000,
     )
 
 
