@@ -52,16 +52,25 @@ sources:
     tumour_id_form: "LTX0001_tumour1"                  # underscore + lowercase; matches muttable, NOT wgd_calls canonical form
     received: 2026-08-31
     notes: |
-      One file per tumour. Post-processed VEP output with AlphaMissense
-      plugin, GRCh37 assets. Loader dedupes to (tumour × variant × transcript),
-      then picks a canonical transcript per variant for scoring.
+      One file per tumour. Muttable-shaped TSV with the AlphaMissense
+      columns appended (NOT raw VEP output). The loader reads only:
+        chr, pos, var, alpha_missense, am_class
+      and dedupes to per-(tumour × chr × pos × alt) because the file is
+      long-form (one row per mutation × sample).
 
-      Layout changed 2026-09-02: files were moved into an `output/`
-      subdirectory, the per-tumour subdirectory was flattened, tumour_id
-      spelling switched from `LTX0001-Tumour1` to `LTX0001_tumour1`, the
-      `_muttable_annotated` suffix became `_muttable_alpha`, and the
-      upstream now emits a clean TSV with no `##` comment lines and no
-      leading `#` on the header row (confirmed by Odysseus 2026-09-02).
+      Real column semantics:
+        alpha_missense  — float score in [0, 1]; NA for non-missense.
+        am_class        — {benign, ambiguous, pathogenic}; NA for non-missense.
+
+      Layout changed 2026-09-02 (confirmed by Odysseus): files were moved
+      into an `output/` subdirectory, the per-tumour subdirectory was
+      flattened, tumour_id spelling in the filename switched from
+      `LTX0001-Tumour1` to `LTX0001_tumour1`, the `_muttable_annotated`
+      suffix became `_muttable_alpha`. Extension `.tsv`, plain tab-separated,
+      clean header row (no `##` comments, no leading `#`). File shape
+      changed from raw VEP → muttable + AM: `Location` / `Allele` /
+      `Consequence` / `Gene` columns no longer exist; the AM score column
+      is `alpha_missense`, renamed to `am_pathogenicity` at build time.
 
   clinical:
     relative_path: tx842_clinical.tsv

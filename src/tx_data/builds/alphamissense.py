@@ -1,16 +1,22 @@
 """Build alphamissense → canonical Parquet.
 
-Reads per-tumour AlphaMissense TSVs, adds `tumour_id` (normalised to
-canonical `LTX0001-Tumour1` form), parses `Location` into `chr` + `pos`,
-and dedupes to per-(tumour, chr, pos, alt) with a single am_pathogenicity
-per group (all rows within a group carry the same score by construction —
-confirmed 2026-08-31).
+Reads per-tumour AlphaMissense-annotated muttable files. Confirmed by
+Odysseus 2026-09-02 that the real upstream is NOT raw VEP output —
+it's a muttable-shaped TSV with `alpha_missense` (score) and `am_class`
+columns appended. That means:
 
-File layout (updated 2026-09-02):
+- No `Location` column to split; `chr` and `pos` are direct.
+- No `Allele` column; the alt allele is muttable's `var`.
+- No `Consequence` / `Gene` columns (they weren't used downstream anyway).
+- Files are per-mutation × per-sample (long form, like muttable), so
+  we still dedup to per-(tumour, chr, pos, alt) — the same variant
+  appears once per sample it was called in, all rows carrying the
+  identical AM score.
+
+File layout:
   <root>/output/annotated_muttables/tx842/<tumour_id>_muttable_alpha.tsv
 where `<tumour_id>` in the filename is the muttable spelling
 (`LTX0001_tumour1`), which the loader normalises back to canonical form.
-Files are plain TSV with a clean header row — no `##` comment lines.
 """
 
 from __future__ import annotations
@@ -26,14 +32,30 @@ from tx_data.sources import resolve_source, source_entry
 
 TABLE = "alphamissense"
 
+_NULL_MARKERS = ["NA", "", "-", "nan"]
+
 
 def _read_am(p: Path) -> pl.DataFrame:
-    """Read one AlphaMissense TSV. Plain tab-separated, clean header row."""
+    """Read one AlphaMissense-annotated muttable TSV.
+
+    Only pulls the columns we actually need. `chr` is forced to String
+    so X / Y / MT don't crash the auto-inferrer; `alpha_missense` is
+    forced to Float64 so a chunk of all-null rows early in the file
+    doesn't trap us into an Int/Utf8 inference.
+    """
     return pl.read_csv(
         source=p,
         separator="\t",
-        null_values=["-"],
-        infer_schema_length=100000,
+        null_values=_NULL_MARKERS,
+        infer_schema_length=10000,
+        schema_overrides={
+            "chr": pl.String,
+            "pos": pl.Int64,
+            "var": pl.String,
+            "alpha_missense": pl.Float64,
+            "am_class": pl.String,
+        },
+        columns=["chr", "pos", "var", "alpha_missense", "am_class"],
     )
 
 
@@ -45,10 +67,10 @@ def _discover_am_files() -> list[tuple[str, Path]]:
     only needs the yml change.
     """
     entry = source_entry(TABLE)
-    pattern = entry["relative_path_pattern"]  # e.g. output/annotated_muttables/tx842/{tumour_id}_muttable_alpha.csv
+    pattern = entry["relative_path_pattern"]
     probe = resolve_source(TABLE, tumour_id="__probe__")
     scan_dir = probe.parent
-    filename_template = Path(pattern).name  # e.g. `{tumour_id}_muttable_alpha.csv`
+    filename_template = Path(pattern).name
     prefix, suffix = filename_template.split("{tumour_id}", 1)
     fname_re = re.compile(re.escape(prefix) + r"(?P<tid>.+?)" + re.escape(suffix) + r"$")
 
@@ -85,28 +107,16 @@ def build() -> pl.DataFrame:
         raw.write_parquet(out)
         return raw
 
-    # Parse Location "chr:pos" or "chr:start-stop".
-    loc_split = pl.col("Location").str.split_exact(":", 1)
-    parsed = raw.with_columns(
-        [
-            loc_split.struct.field("field_0").alias("chr"),
-            loc_split.struct.field("field_1")
-                .str.split_exact("-", 1)
-                .struct.field("field_0")
-                .cast(pl.Int64)
-                .alias("pos"),
-            pl.col("Allele").alias("alt"),
-            pl.col("am_pathogenicity").cast(pl.Float64, strict=False),
-        ]
-    )
+    # Rename to the canonical column names downstream expects.
+    parsed = raw.rename({"alpha_missense": "am_pathogenicity", "var": "alt"})
 
-    # Dedup to per-variant AM score. `max` collapses agreeing values and ignores nulls.
+    # Dedup to per-variant. Real files are long-form (per mutation × sample),
+    # so the same (tumour, chr, pos, alt) may appear many times with the
+    # identical AM score; `max` collapses agreeing values and ignores nulls.
     scored = parsed.group_by(["tumour_id", "chr", "pos", "alt"]).agg(
         [
             pl.col("am_pathogenicity").max().alias("am_pathogenicity"),
             pl.col("am_class").drop_nulls().first().alias("am_class"),
-            pl.col("Consequence").drop_nulls().first().alias("consequence_any"),
-            pl.col("Gene").drop_nulls().first().alias("gene_ensembl_any"),
         ]
     )
 

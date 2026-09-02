@@ -501,16 +501,24 @@ def _write_clinical(specs: list[TumourSpec]) -> None:
     print(f"wrote {out}")
 
 
-# --- AlphaMissense (per-tumour VEP output) -----------------------------------
+# --- AlphaMissense (muttable-shaped with AM columns appended) ----------------
+#
+# Real Tx842 layout (confirmed 2026-09-02): per-tumour TSVs whose columns are
+# muttable's columns + `alpha_missense` (float score) + `am_class`
+# (benign / ambiguous / pathogenic; NA for non-missense). The AM loader only
+# reads `chr, pos, var, alpha_missense, am_class` — everything else can be a
+# stub, but we emit the full muttable header shape so the mock's columns
+# match what a real file would carry.
 
 def _write_alphamissense(specs: list[TumourSpec]) -> None:
     AM_ROOT.mkdir(parents=True, exist_ok=True)
 
+    # Muttable-shaped header (subset the loader needs, plus enough padding
+    # to look realistic). Order doesn't matter for the loader — it reads by
+    # name — but we mirror muttable's leading columns for readability.
     header = [
-        "Uploaded_variation", "Location", "Allele", "Gene", "Feature",
-        "Feature_type", "Consequence", "cDNA_position", "CDS_position",
-        "Protein_position", "Amino_acids", "Codons", "Existing_variation",
-        "IMPACT", "DISTANCE", "STRAND", "FLAGS", "am_class", "am_pathogenicity",
+        "patient_id", "patient_tumour", "chr", "start", "stop",
+        "ref", "var", "pos", "gene", "alpha_missense", "am_class",
     ]
 
     for spec in specs:
@@ -518,43 +526,31 @@ def _write_alphamissense(specs: list[TumourSpec]) -> None:
         out = AM_ROOT / f"{spec.tumour_id_muttable}_muttable_alpha.tsv"
 
         lines = ["\t".join(header)]
-        upload_id = f"{spec.patient_id}_{spec.tumour_ordinal}"
         for m in muts:
-            loc = f"{m['chr']}:{m['pos_left']}"
             if m["variant_class"] == "missense":
                 am_score = round(RNG.uniform(0.6, 0.99) if m["gene"] in {"TP53", "KRAS", "EGFR"}
                                  else RNG.uniform(0.02, 0.35), 4)
                 am_class = ("pathogenic" if am_score > 0.564
                             else "ambiguous" if am_score >= 0.34
                             else "benign")
-                cons = "missense_variant"
-                aa = m["aachange"].split("p.")[-1]
-                aa_ref, aa_alt = aa[0], aa[-1]
-                impact = "MODERATE"
-                lines.append("\t".join([
-                    upload_id, loc, m["var"], m["gene_ensembl"], "ENST00000000001",
-                    "Transcript", cons, "100", "100", "34",
-                    f"{aa_ref}/{aa_alt}", "Ctt/Gtt", "-", impact, "-", "1", "-",
-                    am_class, str(am_score),
-                ]))
-            elif m["variant_class"] == "synonymous":
-                lines.append("\t".join([
-                    upload_id, loc, m["var"], m["gene_ensembl"], "ENST00000000001",
-                    "Transcript", "synonymous_variant", "100", "100", "34",
-                    "L/L", "Ctt/Ctc", "-", "LOW", "-", "1", "-", "-", "-",
-                ]))
-            elif m["variant_class"] == "nonsense":
-                lines.append("\t".join([
-                    upload_id, loc, m["var"], m["gene_ensembl"], "ENST00000000001",
-                    "Transcript", "stop_gained", "100", "100", "34",
-                    "R/*", "Cga/Tga", "-", "HIGH", "-", "1", "-", "-", "-",
-                ]))
-            else:  # indel
-                lines.append("\t".join([
-                    upload_id, loc, m["var"], m["gene_ensembl"], "ENST00000000001",
-                    "Transcript", "intron_variant", "-", "-", "-",
-                    "-", "-", "-", "MODIFIER", "-", "-1", "-", "-", "-",
-                ]))
+                am_score_s, am_class_s = str(am_score), am_class
+            else:
+                # AM doesn't score non-missense; upstream writes NA in both cols.
+                am_score_s, am_class_s = "NA", "NA"
+
+            lines.append("\t".join([
+                spec.patient_id,
+                spec.tumour_id_muttable,
+                m["chr"],
+                str(m["start"]),
+                str(m["stop"]),
+                m["ref"],
+                m["var"],
+                str(m["pos_left"]),
+                m["gene"],
+                am_score_s,
+                am_class_s,
+            ]))
         out.write_text("\n".join(lines) + "\n")
     print(f"wrote AM files for {len(specs)} tumours under {AM_ROOT}")
 
