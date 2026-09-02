@@ -23,8 +23,16 @@ def build() -> pl.DataFrame:
     src = resolve_source(TABLE)
     log(f"read {src}")
 
-    # Sniff whether source is gzip TSV or plain TSV by extension.
-    df = pl.read_csv(src, separator="\t", null_values=["NA", ""], infer_schema_length=10000)
+    # Force `chr` to String at READ time. If we let polars infer, the first
+    # 10 000 rows may be all autosomes → i64 inferred → parse fails when it
+    # hits X / Y / MT further into the file.
+    df = pl.read_csv(
+        src,
+        separator="\t",
+        null_values=["NA", ""],
+        infer_schema_length=10000,
+        schema_overrides={"chr": pl.String},
+    )
 
     df = df.with_columns(
         [
@@ -32,9 +40,6 @@ def build() -> pl.DataFrame:
             canonical_tumour_id_expr("patient_tumour"),
             # Canonicalise clone (was float mutation_cluster).
             canonical_clone_expr("mutation_cluster"),
-            # Force chr to string so downstream joins with AM (which is string)
-            # work; also correct for X/Y/MT.
-            pl.col("chr").cast(pl.Utf8).alias("chr"),
         ]
     )
 

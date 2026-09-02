@@ -23,8 +23,14 @@ def build() -> pl.DataFrame:
     src = resolve_source(TABLE)
     log(f"read {src}")
 
+    # Force chromosome columns to String — otherwise polars may infer i64
+    # from the first N rows (all autosomes) and fail on X / Y / MT.
     df = pl.read_csv(
-        src, separator="\t", null_values=["NA", ""], infer_schema_length=10000
+        src,
+        separator="\t",
+        null_values=["NA", ""],
+        infer_schema_length=10000,
+        schema_overrides={"chr_hg19": pl.String, "chr_hg38": pl.String},
     )
 
     # Coerce booleans (source has "TRUE"/"FALSE" strings).
