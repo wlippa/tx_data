@@ -12,27 +12,26 @@ description: |
 
 provenance:
   cohort: TRACERx 842 (Tx842)
-  hpc_source_pattern: /nemo/project/proj-tracerx-lung/tctProjects/CN-CCF/alphamissense/output/annotated_muttables/tx842/<tumour_id>_muttable_alpha.csv
-  format_on_source: VEP tab-separated output. First many lines are `##` comment metadata; the header row starts with a single `#` (`#Uploaded_variation ...`). File is named `.csv` but the body is TSV (from VEP `--tab`) — confirm on cluster with `head -3` if downstream reader ever objects.
+  hpc_source_pattern: /nemo/project/proj-tracerx-lung/tctProjects/CN-CCF/alphamissense/output/annotated_muttables/tx842/<tumour_id>_muttable_alpha.tsv
+  format_on_source: Plain tab-separated. No `##` comment lines; header row is clean (no leading `#`). Post-processed downstream of VEP.
   received: 2026-08-31
   received_via: example file for LTX0001-Tumour1 sent by Odysseus
-  canonical_format: Parquet (after build script; comment lines stripped, per-mutation dedup)
+  canonical_format: Parquet (after build script; per-mutation dedup)
   layout_change_2026_09_02: |
-    Upstream pipeline moved files:
+    Upstream pipeline moved files and simplified the format:
       from: annotated_muttables/tx842/<canonical_tumour_id>/<canonical_tumour_id>_muttable_annotated.tsv
-      to:   output/annotated_muttables/tx842/<muttable_tumour_id>_muttable_alpha.csv
+      to:   output/annotated_muttables/tx842/<muttable_tumour_id>_muttable_alpha.tsv
     Per-tumour subdirectory removed (flat layout). tumour_id spelling in
     the filename switched to muttable form (`LTX0001_tumour1`); the loader
-    normalises it back to canonical `LTX0001-Tumour1` on ingest.
+    normalises it back to canonical `LTX0001-Tumour1` on ingest. The
+    `##` comment header block and the leading `#` on the header row were
+    also removed — reader now uses a plain TSV parse.
   pipeline: |
-    Input VCF built from muttable (per tumour). Fed through VEP:
-      vep --assembly GRCh37 --cache --database 0 --dir_cache <asset_dir>
-          --dir_plugins /plugins
-          --input_file <tumour_id>_muttable.vcf
-          --offline
-          --output_file <tumour_id>_muttable_alpha.csv
-          --plugin AlphaMissense,file=<asset_dir>/AlphaMissense_hg19.tsv.gz
-          --tab
+    Input VCF built from muttable (per tumour). Fed through VEP with
+    AlphaMissense plugin (GRCh37 assets), then post-processed into a
+    plain TSV:
+      output_file  <tumour_id>_muttable_alpha.tsv
+      plugin       AlphaMissense,file=<asset_dir>/AlphaMissense_hg19.tsv.gz
     Assets:
       - AlphaMissense_hg19.tsv.gz (thresholds: benign<0.34, ambiguous 0.34–0.564, pathogenic>0.564)
       - Ensembl cache GRCh37.p13, GENCODE 19, dbSNP 156, COSMIC 98, ClinVar 202306, gnomADe/g v4.1

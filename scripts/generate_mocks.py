@@ -18,7 +18,7 @@ Files written under ``nemo_mock/``:
   - ``tx842_mutation_table.tsv.gz``  (long format, one row per mutation×sample)
   - ``WGD/release_tx842/WGD_calls.tsv``
   - ``tx842_clinical.tsv``
-  - ``alt/cn_ccf_alphamissense/output/annotated_muttables/tx842/<tumour_muttable_form>_muttable_alpha.csv``
+  - ``alt/cn_ccf_alphamissense/output/annotated_muttables/tx842/<tumour_muttable_form>_muttable_alpha.tsv``
 
 Deterministic (fixed seed) so mocks re-generate identically.
 """
@@ -507,22 +507,17 @@ def _write_alphamissense(specs: list[TumourSpec]) -> None:
     AM_ROOT.mkdir(parents=True, exist_ok=True)
 
     header = [
-        "#Uploaded_variation", "Location", "Allele", "Gene", "Feature",
+        "Uploaded_variation", "Location", "Allele", "Gene", "Feature",
         "Feature_type", "Consequence", "cDNA_position", "CDS_position",
         "Protein_position", "Amino_acids", "Codons", "Existing_variation",
         "IMPACT", "DISTANCE", "STRAND", "FLAGS", "am_class", "am_pathogenicity",
     ]
-    comments = [
-        "## ENSEMBL VARIANT EFFECT PREDICTOR v115.2 (mock)",
-        "## assembly version GRCh37.p13",
-        "## AlphaMissense plugin — thresholds benign<0.34, ambiguous, pathogenic>0.564",
-    ]
 
     for spec in specs:
         muts = _mutations_for(spec)
-        out = AM_ROOT / f"{spec.tumour_id_muttable}_muttable_alpha.csv"
+        out = AM_ROOT / f"{spec.tumour_id_muttable}_muttable_alpha.tsv"
 
-        lines = comments + ["\t".join(header)]
+        lines = ["\t".join(header)]
         upload_id = f"{spec.patient_id}_{spec.tumour_ordinal}"
         for m in muts:
             loc = f"{m['chr']}:{m['pos_left']}"

@@ -1,16 +1,16 @@
 """Build alphamissense → canonical Parquet.
 
-Reads per-tumour VEP output files (with `##` comment header), skips comments,
-strips the leading `#` from the header row, adds `tumour_id` (normalised to
+Reads per-tumour AlphaMissense TSVs, adds `tumour_id` (normalised to
 canonical `LTX0001-Tumour1` form), parses `Location` into `chr` + `pos`,
-dedupes to per-(tumour, chr, pos, alt) with a single am_pathogenicity per
-group (all rows within a group carry the same score by construction —
+and dedupes to per-(tumour, chr, pos, alt) with a single am_pathogenicity
+per group (all rows within a group carry the same score by construction —
 confirmed 2026-08-31).
 
 File layout (updated 2026-09-02):
-  <root>/output/annotated_muttables/tx842/<tumour_id>_muttable_alpha.csv
+  <root>/output/annotated_muttables/tx842/<tumour_id>_muttable_alpha.tsv
 where `<tumour_id>` in the filename is the muttable spelling
 (`LTX0001_tumour1`), which the loader normalises back to canonical form.
+Files are plain TSV with a clean header row — no `##` comment lines.
 """
 
 from __future__ import annotations
@@ -27,19 +27,10 @@ from tx_data.sources import resolve_source, source_entry
 TABLE = "alphamissense"
 
 
-def _read_vep(p: Path) -> pl.DataFrame:
-    """Read one VEP file: skip `##` lines, strip `#` from header, load as TSV.
-
-    Files may be named `.tsv` or `.csv`; the body is tab-separated regardless
-    (VEP `--tab` output).
-    """
-    text = p.read_text()
-    lines = [ln for ln in text.splitlines() if not ln.startswith("##")]
-    if lines and lines[0].startswith("#"):
-        lines[0] = lines[0].lstrip("#")
-    body = "\n".join(lines)
+def _read_am(p: Path) -> pl.DataFrame:
+    """Read one AlphaMissense TSV. Plain tab-separated, clean header row."""
     return pl.read_csv(
-        source=body.encode(),
+        source=p,
         separator="\t",
         null_values=["-"],
         infer_schema_length=10000,
@@ -83,7 +74,7 @@ def build() -> pl.DataFrame:
     frames = []
     for tid_from_filename, p in discovered:
         tid_canonical = canonical_tumour_id(tid_from_filename)
-        df = _read_vep(p).with_columns(pl.lit(tid_canonical).alias("tumour_id"))
+        df = _read_am(p).with_columns(pl.lit(tid_canonical).alias("tumour_id"))
         frames.append(df)
 
     raw = pl.concat(frames, how="vertical_relaxed") if frames else pl.DataFrame()

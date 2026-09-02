@@ -1,7 +1,4 @@
-## ENSEMBL VARIANT EFFECT PREDICTOR v115.2 (mock)
-## assembly version GRCh37.p13
-## AlphaMissense plugin — thresholds benign<0.34, ambiguous, pathogenic>0.564
-#Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	DISTANCE	STRAND	FLAGS	am_class	am_pathogenicity
+Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	DISTANCE	STRAND	FLAGS	am_class	am_pathogenicity
 LTX0008_1	10:120790636	G	ENSG00000107581	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.1071
 LTX0008_1	12:25398843	G	ENSG00000133703	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	pathogenic	0.8089
 LTX0008_1	8:128748743	G	ENSG00000136997	ENST00000000001	Transcript	missense_variant	100	100	34	L/V	Ctt/Gtt	-	MODERATE	-	1	-	benign	0.2235
