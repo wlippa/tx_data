@@ -18,7 +18,7 @@ Files written under ``nemo_mock/``:
   - ``tx842_mutation_table.tsv.gz``  (long format, one row per mutation×sample)
   - ``WGD/release_tx842/WGD_calls.tsv``
   - ``tx842_clinical.tsv``
-  - ``alt/cn_ccf_alphamissense/annotated_muttables/tx842/<tumour>/<tumour>_muttable_annotated.tsv``
+  - ``alt/cn_ccf_alphamissense/output/annotated_muttables/tx842/<tumour_muttable_form>_muttable_alpha.csv``
 
 Deterministic (fixed seed) so mocks re-generate identically.
 """
@@ -33,7 +33,7 @@ from pathlib import Path
 from tx_data.paths import REPO_ROOT
 
 MOCK_ROOT = REPO_ROOT / "nemo_mock"
-AM_ROOT = MOCK_ROOT / "alt" / "cn_ccf_alphamissense" / "annotated_muttables" / "tx842"
+AM_ROOT = MOCK_ROOT / "alt" / "cn_ccf_alphamissense" / "output" / "annotated_muttables" / "tx842"
 WGD_DIR = MOCK_ROOT / "WGD" / "release_tx842"
 
 RNG = random.Random(20260831)
@@ -520,9 +520,7 @@ def _write_alphamissense(specs: list[TumourSpec]) -> None:
 
     for spec in specs:
         muts = _mutations_for(spec)
-        tdir = AM_ROOT / spec.tumour_id_canonical
-        tdir.mkdir(parents=True, exist_ok=True)
-        out = tdir / f"{spec.tumour_id_canonical}_muttable_annotated.tsv"
+        out = AM_ROOT / f"{spec.tumour_id_muttable}_muttable_alpha.csv"
 
         lines = comments + ["\t".join(header)]
         upload_id = f"{spec.patient_id}_{spec.tumour_ordinal}"

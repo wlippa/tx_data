@@ -12,18 +12,25 @@ description: |
 
 provenance:
   cohort: TRACERx 842 (Tx842)
-  hpc_source_pattern: /nemo/project/proj-tracerx-lung/tctProjects/CN-CCF/alphamissense/annotated_muttables/tx842/<tumour_id>/<tumour_id>_muttable_annotated.tsv
-  format_on_source: TSV, VEP output. First many lines are `##` comment metadata; the header row starts with a single `#` (`#Uploaded_variation ...`).
+  hpc_source_pattern: /nemo/project/proj-tracerx-lung/tctProjects/CN-CCF/alphamissense/output/annotated_muttables/tx842/<tumour_id>_muttable_alpha.csv
+  format_on_source: VEP tab-separated output. First many lines are `##` comment metadata; the header row starts with a single `#` (`#Uploaded_variation ...`). File is named `.csv` but the body is TSV (from VEP `--tab`) — confirm on cluster with `head -3` if downstream reader ever objects.
   received: 2026-08-31
   received_via: example file for LTX0001-Tumour1 sent by Odysseus
   canonical_format: Parquet (after build script; comment lines stripped, per-mutation dedup)
+  layout_change_2026_09_02: |
+    Upstream pipeline moved files:
+      from: annotated_muttables/tx842/<canonical_tumour_id>/<canonical_tumour_id>_muttable_annotated.tsv
+      to:   output/annotated_muttables/tx842/<muttable_tumour_id>_muttable_alpha.csv
+    Per-tumour subdirectory removed (flat layout). tumour_id spelling in
+    the filename switched to muttable form (`LTX0001_tumour1`); the loader
+    normalises it back to canonical `LTX0001-Tumour1` on ingest.
   pipeline: |
     Input VCF built from muttable (per tumour). Fed through VEP:
       vep --assembly GRCh37 --cache --database 0 --dir_cache <asset_dir>
           --dir_plugins /plugins
           --input_file <tumour_id>_muttable.vcf
           --offline
-          --output_file <tumour_id>_muttable_annotated.tsv
+          --output_file <tumour_id>_muttable_alpha.csv
           --plugin AlphaMissense,file=<asset_dir>/AlphaMissense_hg19.tsv.gz
           --tab
     Assets:
@@ -50,7 +57,8 @@ file_layout:
   header_column_prefix_to_strip: "#Uploaded_variation"  # strip leading # from first column name
 
 per_tumour_files: true
-tumour_id_form_in_path: "LTX0001-Tumour1"  # matches wgd_calls canonical form; NOT muttable's LTX0001_tumour1
+per_tumour_layout: flat                    # files sit directly under tx842/, not in per-tumour subdirs
+tumour_id_form_in_path: "LTX0001_tumour1"  # matches muttable form; loader normalises to canonical `LTX0001-Tumour1`
 
 joins:
   muttable:

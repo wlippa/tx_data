@@ -44,18 +44,27 @@ sources:
 
   alphamissense:
     source_root: cn_ccf_alphamissense                  # from alt_source_roots
-    relative_path_pattern: "annotated_muttables/tx842/{tumour_id}/{tumour_id}_muttable_annotated.tsv"
-    format: tsv_vep                                    # tab-separated with `##` comment header
+    relative_path_pattern: "output/annotated_muttables/tx842/{tumour_id}_muttable_alpha.csv"
+    format: tsv_vep                                    # VEP `--tab` output — tab-separated despite `.csv` extension (TBC)
     header: true
     header_prefix: "#"                                 # header line starts with a single `#`
     comment_prefix: "##"                               # metadata lines to skip
     per_tumour: true
-    tumour_id_form: "LTX0001-Tumour1"
+    per_tumour_layout: flat                            # files sit directly under tx842/ (no per-tumour subdirectory)
+    tumour_id_form: "LTX0001_tumour1"                  # underscore + lowercase; matches muttable, NOT wgd_calls canonical form
     received: 2026-08-31
     notes: |
       One file per tumour. VEP v115.2 output with AlphaMissense plugin,
       GRCh37 assets. Loader dedupes to (tumour × variant × transcript),
       then picks a canonical transcript per variant for scoring.
+
+      Layout changed 2026-09-02: files were moved into an `output/`
+      subdirectory, the per-tumour subdirectory was flattened, tumour_id
+      spelling switched from `LTX0001-Tumour1` to `LTX0001_tumour1`, the
+      `_muttable_annotated` suffix became `_muttable_alpha`, and the
+      extension became `.csv`. The file body is still VEP tab-separated
+      output — the extension change is cosmetic. Confirm on the cluster
+      with `head -3 <one_file>` (should start with `##`).
 
   clinical:
     relative_path: tx842_clinical.tsv
