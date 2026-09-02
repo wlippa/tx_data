@@ -60,7 +60,18 @@ sources:
 
       Real column semantics:
         alpha_missense  — float score in [0, 1]; NA for non-missense.
-        am_class        — {benign, ambiguous, pathogenic}; NA for non-missense.
+        am_class        — raw upstream labels (DeepMind naming):
+                            {ambiguous, Likely benign, Likely pathogenic,
+                             not_classified, NA}
+                          The build step normalises to the canonical
+                          {benign, ambiguous, pathogenic, null} set so
+                          downstream code doesn't need to know about the
+                          naming variants:
+                            Likely benign     → benign
+                            Likely pathogenic → pathogenic
+                            ambiguous         → ambiguous
+                            not_classified    → null
+                            NA / empty        → null
 
       Layout changed 2026-09-02 (confirmed by Odysseus): files were moved
       into an `output/` subdirectory, the per-tumour subdirectory was

@@ -530,13 +530,16 @@ def _write_alphamissense(specs: list[TumourSpec]) -> None:
             if m["variant_class"] == "missense":
                 am_score = round(RNG.uniform(0.6, 0.99) if m["gene"] in {"TP53", "KRAS", "EGFR"}
                                  else RNG.uniform(0.02, 0.35), 4)
-                am_class = ("pathogenic" if am_score > 0.564
+                # Emit raw upstream labels ("Likely benign" / "Likely
+                # pathogenic") so the tx_data build's normalisation is
+                # exercised on mocks too.
+                am_class = ("Likely pathogenic" if am_score > 0.564
                             else "ambiguous" if am_score >= 0.34
-                            else "benign")
+                            else "Likely benign")
                 am_score_s, am_class_s = str(am_score), am_class
             else:
-                # AM doesn't score non-missense; upstream writes NA in both cols.
-                am_score_s, am_class_s = "NA", "NA"
+                # AM doesn't score non-missense; upstream writes `not_classified`.
+                am_score_s, am_class_s = "NA", "not_classified"
 
             lines.append("\t".join([
                 spec.patient_id,

@@ -34,6 +34,20 @@ TABLE = "alphamissense"
 
 _NULL_MARKERS = ["NA", "", "-", "nan"]
 
+# Real upstream emits DeepMind's original labels ("Likely benign" /
+# "Likely pathogenic"), the VEP plugin (which our downstream code assumes)
+# renames them to "benign" / "pathogenic". `not_classified` means AM had no
+# opinion for this variant — coerced to null so downstream can distinguish
+# "AM said benign" from "AM had no answer".
+_AM_CLASS_CANONICAL = {
+    "Likely benign": "benign",
+    "Likely pathogenic": "pathogenic",
+    "ambiguous": "ambiguous",
+    "benign": "benign",
+    "pathogenic": "pathogenic",
+    "not_classified": None,
+}
+
 
 def _read_am(p: Path) -> pl.DataFrame:
     """Read one AlphaMissense-annotated muttable TSV.
@@ -107,8 +121,12 @@ def build() -> pl.DataFrame:
         raw.write_parquet(out)
         return raw
 
-    # Rename to the canonical column names downstream expects.
-    parsed = raw.rename({"alpha_missense": "am_pathogenicity", "var": "alt"})
+    # Rename to the canonical column names downstream expects, and coerce
+    # `am_class` from whatever variant the upstream emitted to the canonical
+    # {benign, ambiguous, pathogenic, null} set.
+    parsed = raw.rename({"alpha_missense": "am_pathogenicity", "var": "alt"}).with_columns(
+        pl.col("am_class").replace(_AM_CLASS_CANONICAL, default=None)
+    )
 
     # Dedup to per-variant. Real files are long-form (per mutation × sample),
     # so the same (tumour, chr, pos, alt) may appear many times with the
