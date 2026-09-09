@@ -92,3 +92,28 @@ def test_id_normalisation_consistency():
     # muttable side already normalised by builder.
     common = mut_tumours & wgd_tumours
     assert common, f"no overlap; mut={list(mut_tumours)[:3]} wgd={list(wgd_tumours)[:3]}"
+
+
+def test_clone_proportions_shape():
+    """Long-form with the expected columns and sensible invariants."""
+    df = pl.read_parquet(DATA / "clone_proportions.parquet")
+    assert set(df.columns) == {"tumour_id", "clone", "sample_id", "proportion"}
+    # Proportions are in [0, 1].
+    assert df["proportion"].min() >= 0.0
+    assert df["proportion"].max() <= 1.0 + 1e-9
+    # Per (tumour, sample) they sum to ~1.
+    sums = df.group_by(["tumour_id", "sample_id"]).agg(pl.col("proportion").sum().alias("s"))
+    assert ((sums["s"] - 1.0).abs() < 1e-6).all()
+    # tumour_id in canonical form; sample_id retains full hashed suffix.
+    assert df["tumour_id"].str.contains("-Tumour").all()
+    assert df["sample_id"].str.contains("--").all()
+
+
+def test_clone_proportions_joins_wgd_calls():
+    """Every (tumour_id, clone) in clone_proportions should exist in wgd_calls."""
+    cp = pl.read_parquet(DATA / "clone_proportions.parquet")
+    wgd = pl.read_parquet(DATA / "wgd_calls.parquet")
+    cp_keys = cp.select(["tumour_id", "clone"]).unique()
+    wgd_keys = wgd.select(["tumour_id", "clone"]).unique()
+    orphans = cp_keys.join(wgd_keys, on=["tumour_id", "clone"], how="anti")
+    assert orphans.height == 0, f"clones in cp_table not in wgd_calls: {orphans}"

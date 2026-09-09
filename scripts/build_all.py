@@ -18,7 +18,16 @@ from tx_data.builds import BUILDERS
 from tx_data.builds._base import DATA_DIR, log
 from tx_data.paths import data_root, data_root_is_mock
 
-TABLES = ("muttable", "clinical", "wgd_calls", "alphamissense", "driver_list")
+TABLES = (
+    "muttable",
+    "clinical",
+    "wgd_calls",
+    "alphamissense",
+    "driver_list",
+    "alpaca",
+    "kallisto",
+    "clone_proportions",
+)
 
 
 def _write_manifest() -> None:
@@ -32,6 +41,11 @@ def _write_manifest() -> None:
             p2 = DATA_DIR / "clinical_per_tumour.parquet"
             if p2.is_file():
                 row_counts["clinical_per_tumour"] = pl.read_parquet(p2).height
+        # kallisto builder additionally emits kallisto_paired_normals.
+        if name == "kallisto":
+            p2 = DATA_DIR / "kallisto_paired_normals.parquet"
+            if p2.is_file():
+                row_counts["kallisto_paired_normals"] = pl.read_parquet(p2).height
 
     manifest = {
         "built_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),

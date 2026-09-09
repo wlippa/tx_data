@@ -20,6 +20,10 @@ cohort:
 
 alt_source_roots:
   cn_ccf_alphamissense: /nemo/project/proj-tracerx-lung/tctProjects/CN-CCF/alphamissense
+  # Mets RNA-seq release lives alongside the main Tx842 release tree; same
+  # top-level cluster root, different subtree. Kept as a named root so tests
+  # and downstream projects don't hardcode the path.
+  tx842_mets_rnaseq: /nemo/project/proj-tracerx-lung/tctProjects/lungTx/Tx842/release/tx842_mets_rnaseq
 
 sources:
   muttable:
@@ -106,3 +110,50 @@ sources:
       TRACERx-bespoke driver gene list. Recommended filter for SNV analyses
       is `lung_mut_driver == TRUE`. Contains both hg19 and hg38 coordinates
       (GENCODE v49). Replaces the earlier plan to use COSMIC CGC directly.
+
+  alpaca:
+    relative_path: ALPACA/output/cohort_results/all_tumours_combined.csv
+    format: csv
+    header: true
+    received: 2026-09-03
+    notes: |
+      Cohort-wide CSV of per-(tumour × segment × clone) allele-specific
+      integer copy numbers from ALPACA. tumour_id and clone forms match
+      wgd_calls directly (canonical `LTX0001-Tumour1`, string `clone1`).
+      Segment field is `<chr>_<start>_<end>` — parsed by the loader.
+
+  clone_proportions:
+    relative_path_pattern: "ALPACA/input/{tumour_id}/cp_table.csv"
+    format: csv
+    header: true
+    per_tumour: true
+    per_tumour_layout: nested        # each tumour has its own `<tumour_id>/` directory
+    tumour_id_form: "LTX0001-Tumour1"   # canonical hyphen + capital T; matches wgd_calls
+    received: 2026-09-09
+    notes: |
+      CONIPHER clone composition table — one CSV per tumour under
+      `ALPACA/input/<tumour_id>/`. Wide layout: N sample columns followed
+      by a trailing `clone` column; values are proportions in [0, 1]. The
+      loader melts to long canonical form and derives tumour_id from the
+      containing directory name.
+
+  kallisto_counts:
+    source_root: tx842_mets_rnaseq
+    relative_path: _aggregate/kallisto_mat/kallisto_counts.parquet
+    format: parquet
+    received: 2026-09-03
+    notes: |
+      Wide-format parquet: one `gene_id` column + N sample columns. Sample
+      column names use the same hashed form as muttable.sample_name_hash.
+      Normal samples contain `_N01`; tumour samples `_T{n}-R{n}`. Combined
+      with `kallisto_tpm` by the builder.
+
+  kallisto_tpm:
+    source_root: tx842_mets_rnaseq
+    relative_path: _aggregate/kallisto_mat/kallisto_tpm.parquet
+    format: parquet
+    received: 2026-09-03
+    notes: |
+      Same shape as `kallisto_counts`; the loader hard-fails if gene and
+      sample sets diverge between the two files.
+

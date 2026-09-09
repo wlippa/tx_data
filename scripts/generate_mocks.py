@@ -35,6 +35,9 @@ from tx_data.paths import REPO_ROOT
 MOCK_ROOT = REPO_ROOT / "nemo_mock"
 AM_ROOT = MOCK_ROOT / "alt" / "cn_ccf_alphamissense" / "output" / "annotated_muttables" / "tx842"
 WGD_DIR = MOCK_ROOT / "WGD" / "release_tx842"
+ALPACA_DIR = MOCK_ROOT / "ALPACA" / "output" / "cohort_results"
+CLONE_PROP_ROOT = MOCK_ROOT / "ALPACA" / "input"
+KALLISTO_DIR = MOCK_ROOT / "alt" / "tx842_mets_rnaseq" / "_aggregate" / "kallisto_mat"
 
 RNG = random.Random(20260831)
 
@@ -628,6 +631,232 @@ def _write_driver_list() -> None:
 
 # --- Entry ------------------------------------------------------------------
 
+# --- ALPACA (per-clone allele-specific CN) ----------------------------------
+#
+# For each tumour, emit rows for every clone × a fixed set of segments
+# covering the mock GENES panel. Segment CN is realistic-ish: baseline 1|1;
+# WGD-bearing clones get diploid (2|2) or amplified; a fraction of clones
+# gets targeted LOH or homdel at TP53 / CDKN2A to exercise those paths.
+
+_ALPACA_SEGMENT_HEADERS = ("tumour_id", "segment", "clone", "pred_CN_A", "pred_CN_B")
+
+
+def _tumour_segments(spec: TumourSpec) -> list[tuple[str, int, int]]:
+    """Return `[(chr, start, end), …]` for this tumour.
+
+    Segments are a small superset of the mock gene panel — one segment per
+    chromosome that appears in GENES, wide enough to cover every gene on that
+    chromosome plus a buffer.
+    """
+    chrom_ranges: dict[str, tuple[int, int]] = {}
+    for _sym, chrom, start, _ens, _cat in GENES:
+        end = start + 990
+        lo, hi = chrom_ranges.get(chrom, (start, end))
+        chrom_ranges[chrom] = (min(lo, start), max(hi, end))
+
+    segments: list[tuple[str, int, int]] = []
+    for chrom, (lo, hi) in sorted(chrom_ranges.items()):
+        # Add a small buffer so segment boundaries don't sit exactly on gene starts.
+        segments.append((chrom, max(1, lo - 100), hi + 100))
+    return segments
+
+
+def _pick_alpaca_cn(spec: TumourSpec, clone: Clone, chrom: str) -> tuple[int, int]:
+    """Return (pred_CN_A, pred_CN_B) for this clone × chromosome.
+
+    Realistic-ish mock rules:
+      - Baseline 1|1 diploid.
+      - WGD in this clone's lineage → 2|2 (single WGD) or 4|4 (double).
+      - TP53 (chr17) in a subclonal branch of a mut_supported tumour → LOH 1|0.
+      - CDKN2A stand-in (chr7, using EGFR's chr) in one clone of LTX0005 → homdel 0|0.
+    """
+    # WGD baseline.
+    cum_gd = _cumulative_gds(spec, clone.name)
+    a = 1 + cum_gd
+    b = 1 + cum_gd
+
+    # Targeted edge cases so tests can assert on specific tumours.
+    if spec.tumour_id_canonical == "LTX0004-Tumour1" and clone.name in ("clone2", "clone4") and chrom == "17":
+        # TP53 LOH on the branch containing clone4.
+        a, b = a + b, 0
+    if spec.tumour_id_canonical == "LTX0005-Tumour1" and clone.name == "clone5" and chrom == "12":
+        # Homdel on a small chromosome-12 segment (covering the mock KRAS region).
+        a, b = 0, 0
+    if spec.tumour_id_canonical == "LTX0002-Tumour1" and clone.name == "clone2" and chrom == "10":
+        # Post-WGD LOH: 4→2|0 (loses one allele after doubling).
+        a, b = a + b, 0
+    return int(a), int(b)
+
+
+def _write_alpaca(specs: list[TumourSpec]) -> None:
+    ALPACA_DIR.mkdir(parents=True, exist_ok=True)
+    out = ALPACA_DIR / "all_tumours_combined.csv"
+
+    lines = [",".join(_ALPACA_SEGMENT_HEADERS)]
+    for spec in specs:
+        if spec.status != "resolved":
+            # ALPACA is not run on unresolved tumours in real life; match that.
+            continue
+        segments = _tumour_segments(spec)
+        for clone in spec.clones:
+            for chrom, start, end in segments:
+                a, b = _pick_alpaca_cn(spec, clone, chrom)
+                lines.append(
+                    ",".join(
+                        [
+                            spec.tumour_id_canonical,
+                            f"{chrom}_{start}_{end}",
+                            clone.name,
+                            str(a),
+                            str(b),
+                        ]
+                    )
+                )
+    out.write_text("\n".join(lines) + "\n")
+    print(f"wrote {out}  ({len(lines) - 1} rows)")
+
+
+# --- Kallisto (counts + TPM, wide parquet with a `gene_id` column) ---------
+#
+# One tumour region-sample column per (patient × tumour × region), plus one
+# `_N01` normal for a subset of patients. Genes = the mock GENES panel'
+# ensembl IDs, so lof_gene can join by ENSG.
+
+def _write_kallisto(specs: list[TumourSpec]) -> None:
+    """Emit two wide-format parquets: kallisto_counts + kallisto_tpm."""
+    try:
+        import polars as pl  # noqa: local import so mock gen still runs without polars for other outputs
+    except ImportError:
+        print("polars not available — skipping kallisto mock")
+        return
+
+    KALLISTO_DIR.mkdir(parents=True, exist_ok=True)
+
+    gene_ids = [g[3] for g in GENES]  # ENSG…
+
+    # Build sample list: for each resolved tumour, N regions; add a normal
+    # sample for 60% of patients (deterministic via RNG).
+    sample_columns: list[str] = []
+    tumour_sample_map: dict[str, TumourSpec] = {}
+    for spec in specs:
+        if spec.status != "resolved":
+            continue
+        for r in range(1, spec.n_samples + 1):
+            h = RNG.randbytes(16).hex()
+            s = f"{spec.patient_id}_SU_T{spec.tumour_ordinal}-R{r}--{h}"
+            sample_columns.append(s)
+            tumour_sample_map[s] = spec
+
+    # Normal samples (patient-level, one per selected patient).
+    normal_samples_by_patient: dict[str, str] = {}
+    patients = sorted({s.patient_id for s in specs if s.status == "resolved"})
+    for pid in patients:
+        if RNG.random() < 0.6:
+            h = RNG.randbytes(16).hex()
+            normal_samples_by_patient[pid] = f"{pid}_SU_N01--{h}"
+
+    sample_columns.extend(sorted(normal_samples_by_patient.values()))
+
+    # Emit realistic-ish TPM: baseline ~ log-normal centred on 10, with
+    # per-tumour × per-gene knockouts for genes we know are homdel/LOH in
+    # ALPACA mock (so the expression path can validate its own signal).
+    tpm_rows = []
+    count_rows = []
+    for g_ens, g_meta in zip(gene_ids, GENES):
+        sym, chrom, _start, _ensembl, _cat = g_meta
+        tpm_row = {"gene_id": g_ens}
+        count_row = {"gene_id": g_ens}
+        for s in sample_columns:
+            m = _SAMPLE_NAME_RE.match(s) if False else None
+            # Baseline log-normal.
+            baseline = max(0.0, RNG.gauss(10, 5))
+
+            # Knockdown at TP53 (chr17) in tumour LTX0004-Tumour1 samples.
+            if sym == "TP53" and s.startswith("LTX0004_"):
+                baseline *= 0.15
+            # Knockdown at KRAS (chr12) in LTX0005-Tumour1.
+            if sym == "KRAS" and s.startswith("LTX0005_"):
+                baseline *= 0.05
+
+            tpm_row[s] = round(baseline, 4)
+            count_row[s] = round(baseline * RNG.uniform(30, 80), 1)
+        tpm_rows.append(tpm_row)
+        count_rows.append(count_row)
+
+    tpm_df = pl.DataFrame(tpm_rows)
+    counts_df = pl.DataFrame(count_rows)
+
+    tpm_out = KALLISTO_DIR / "kallisto_tpm.parquet"
+    counts_out = KALLISTO_DIR / "kallisto_counts.parquet"
+    tpm_df.write_parquet(tpm_out)
+    counts_df.write_parquet(counts_out)
+    print(f"wrote {tpm_out}  ({tpm_df.height} genes × {tpm_df.width - 1} samples)")
+    print(f"wrote {counts_out}  ({counts_df.height} genes × {counts_df.width - 1} samples)")
+
+
+# Placeholder (never matches); kept only so the block above doesn't hit an
+# undefined name when we later add a real parser. Regex parsing is in
+# tx_data/builds/kallisto.py; the mock just constructs plausible names.
+_SAMPLE_NAME_RE = None
+
+
+def _write_clone_proportions(specs: list[TumourSpec]) -> None:
+    """Emit `ALPACA/input/<tumour_id>/cp_table.csv` for every resolved tumour.
+
+    Layout matches the real source: N sample columns + trailing `clone`
+    column. Values per sample column sum to 1. Ensures at least one clone
+    per tumour is fully clonal (present) and at least one is absent
+    (all-zero row) so downstream presence-threshold logic gets exercised.
+    """
+    for spec in specs:
+        if spec.status != "resolved":
+            continue
+
+        tumour_dir = CLONE_PROP_ROOT / spec.tumour_id_canonical
+        tumour_dir.mkdir(parents=True, exist_ok=True)
+
+        # Sample IDs mirror the kallisto naming convention (`SU_T{n}-R{r}--<hash>`)
+        # so the two mocks share a plausible cross-table shape.
+        sample_ids: list[str] = []
+        for r in range(1, spec.n_samples + 1):
+            h = RNG.randbytes(6).hex()
+            sample_ids.append(
+                f"{spec.patient_id}_SU_T{spec.tumour_ordinal}-R{r}--{h}"
+            )
+
+        clone_names = [c.name for c in spec.clones]
+        # proportions[sample_idx][clone_idx] → float
+        proportions: dict[str, dict[str, float]] = {s: {c: 0.0 for c in clone_names} for s in sample_ids}
+
+        # For each sample, pick a mixture of 1–3 clones (weighted to sum to 1).
+        # First sample forces a fully-clonal state on the trunk (clone1) so
+        # every mock tumour has at least one always-present clone.
+        for idx, s in enumerate(sample_ids):
+            if idx == 0:
+                proportions[s][clone_names[0]] = 1.0
+                continue
+            k = RNG.choice([1, 2, 3])
+            picks = RNG.sample(clone_names, k=min(k, len(clone_names)))
+            weights = [RNG.uniform(0.1, 1.0) for _ in picks]
+            tot = sum(weights)
+            for c, w in zip(picks, weights):
+                proportions[s][c] = round(w / tot, 4)
+            # Adjust final entry so column sums to exactly 1.
+            drift = 1.0 - sum(proportions[s].values())
+            proportions[s][picks[-1]] = round(proportions[s][picks[-1]] + drift, 4)
+
+        # Compose CSV: sample columns then `clone`.
+        header = ",".join(sample_ids + ["clone"])
+        rows = [header]
+        for c in clone_names:
+            cells = [f"{proportions[s][c]:.4g}" for s in sample_ids]
+            rows.append(",".join(cells + [c]))
+
+        out = tumour_dir / "cp_table.csv"
+        out.write_text("\n".join(rows) + "\n")
+    print(f"wrote {sum(1 for s in specs if s.status == 'resolved')} cp_table.csv files under {CLONE_PROP_ROOT}")
+
+
 def main() -> None:
     MOCK_ROOT.mkdir(parents=True, exist_ok=True)
     specs = cohort()
@@ -638,6 +867,9 @@ def main() -> None:
     _write_clinical(specs)
     _write_alphamissense(specs)
     _write_driver_list()
+    _write_alpaca(specs)
+    _write_kallisto(specs)
+    _write_clone_proportions(specs)
     print("done.")
 
 
