@@ -3,7 +3,7 @@ name = "tx_data"
 version = "0.0.1"
 description = "Semantic data layer for TRACERx cohort analysis"
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-arm64"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
 
 [dependencies]
 python = "3.11.*"

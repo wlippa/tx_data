@@ -21,6 +21,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PATHS_YML = REPO_ROOT / "config" / "paths.yml"
 DEFAULT_MOCK_ROOT = REPO_ROOT / "nemo_mock"
+DEFAULT_PROD_ROOT = Path(
+    "/nemo/project/proj-tracerx-lung/tctProjects/lungTx/Tx842/release/tracerx_842"
+)
+
 
 
 def data_root() -> Path:
@@ -45,6 +49,22 @@ def data_root_is_mock() -> bool:
         return data_root().resolve() == DEFAULT_MOCK_ROOT.resolve()
     except OSError:
         return False
+
+
+def build_root_for_mode(mode: str | None) -> Path | None:
+    """Return the source root requested by the build command.
+
+    `None` preserves the existing `data_root()` resolution order.
+    "sandbox" forces the repo-local mock tree.
+    "prod" forces the HPC release path.
+    """
+    if mode is None:
+        return None
+    if mode == "sandbox":
+        return DEFAULT_MOCK_ROOT
+    if mode == "prod":
+        return DEFAULT_PROD_ROOT
+    raise ValueError(f"Unknown build mode: {mode!r}")
 
 
 def _alt_root(alias: str, alt_source_roots: Mapping[str, str]) -> Path:

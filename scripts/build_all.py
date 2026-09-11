@@ -8,15 +8,15 @@ given set of parquets came from.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import polars as pl
 
-from tx_data.builds import BUILDERS
-from tx_data.builds._base import DATA_DIR, log
-from tx_data.paths import data_root, data_root_is_mock
+from tx_data.paths import build_root_for_mode
 
 TABLES = (
     "muttable",
@@ -30,34 +30,57 @@ TABLES = (
 )
 
 
-def _write_manifest() -> None:
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        choices=("sandbox", "prod"),
+        help="Override the source root used for the build.",
+    )
+    return parser.parse_args()
+
+
+def _apply_build_mode(mode: str | None) -> None:
+    root = build_root_for_mode(mode)
+    if root is None:
+        return
+    os.environ["TX_DATA_ROOT"] = str(root)
+
+
+def _write_manifest(
+    data_dir: Path,
+    data_root_fn,
+    data_root_is_mock_fn,
+    log_fn,
+) -> None:
     row_counts: dict[str, int] = {}
     for name in TABLES:
-        p = DATA_DIR / f"{name}.parquet"
+        p = data_dir / f"{name}.parquet"
         if p.is_file():
             row_counts[name] = pl.read_parquet(p).height
         # clinical builder additionally emits clinical_per_tumour; capture it.
         if name == "clinical":
-            p2 = DATA_DIR / "clinical_per_tumour.parquet"
+            p2 = data_dir / "clinical_per_tumour.parquet"
             if p2.is_file():
                 row_counts["clinical_per_tumour"] = pl.read_parquet(p2).height
         # kallisto builder additionally emits kallisto_paired_normals.
         if name == "kallisto":
-            p2 = DATA_DIR / "kallisto_paired_normals.parquet"
+            p2 = data_dir / "kallisto_paired_normals.parquet"
             if p2.is_file():
                 row_counts["kallisto_paired_normals"] = pl.read_parquet(p2).height
 
     manifest = {
         "built_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "data_root": str(data_root()),
-        "data_root_is_mock": data_root_is_mock(),
+        "data_root": str(data_root_fn()),
+        "data_root_is_mock": data_root_is_mock_fn(),
         "env_TX_DATA_ROOT": os.environ.get("TX_DATA_ROOT"),
         "table_row_counts": row_counts,
     }
-    manifest_path = DATA_DIR / "_build_manifest.json"
+    manifest_path = data_dir / "_build_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    log(f"wrote {manifest_path}")
-    log(
+    log_fn(f"wrote {manifest_path}")
+    log_fn(
         f"data_root={manifest['data_root']} "
         f"is_mock={manifest['data_root_is_mock']} "
         f"tables={row_counts}"
@@ -65,6 +88,13 @@ def _write_manifest() -> None:
 
 
 if __name__ == "__main__":
+    args = _parse_args()
+    _apply_build_mode(args.mode)
+
+    from tx_data.builds import BUILDERS
+    from tx_data.builds._base import DATA_DIR, log
+    from tx_data.paths import data_root, data_root_is_mock
+
     for name in TABLES:
         BUILDERS[name]()
-    _write_manifest()
+    _write_manifest(DATA_DIR, data_root, data_root_is_mock, log)

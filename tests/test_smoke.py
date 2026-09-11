@@ -26,6 +26,12 @@ def test_data_root_default_is_nemo_mock(monkeypatch):
     assert root.name == "nemo_mock"
 
 
+def test_build_root_for_mode():
+    assert paths.build_root_for_mode(None) is None
+    assert paths.build_root_for_mode("sandbox") == paths.DEFAULT_MOCK_ROOT
+    assert paths.build_root_for_mode("prod") == paths.DEFAULT_PROD_ROOT
+
+
 def test_catalog_dir_exists():
     assert catalog.CATALOG_DIR.exists()
 

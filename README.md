@@ -19,6 +19,10 @@ Code never hardcodes `/Nemo`. Paths resolve via `tx_data.paths.data_root()`, whi
 # Local dev — uses nemo_mock/
 python scripts/build_clinical.py
 
+# Explicit build modes for the full build
+pixi build sandbox
+pixi build prod
+
 # Production on HPC
 export TX_DATA_ROOT=/Nemo
 python scripts/build_clinical.py
