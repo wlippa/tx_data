@@ -57,7 +57,7 @@ derived_views:
       "1": "Lesion1_… / histology1_… columns"
       "2": "Lesion2_… / histology2_… columns"
     joins_to:
-      - "muttable.patient_tumour (canonical form 'LTX0001-Tumour1')"
+      - "muttable.tumour_id (canonical form 'LTX0001-Tumour1')"
       - "wgd_calls.tumour_id"
 
 column_groups:

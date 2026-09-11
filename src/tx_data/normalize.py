@@ -2,6 +2,9 @@
 
 - ``tumour_id`` canonical form: ``LTX0001-Tumour1``  (hyphen, capital T).
 - ``clone`` canonical form: ``clone1`` (string with 'clone' prefix; NaN → None).
+- ``chr`` canonical form: no ``chr`` prefix (``"17"``, ``"X"``, ``"MT"``),
+  always String. Applies to muttable.chr, alphamissense.chr,
+  alpaca.segment_chr, driver_list.chr_hg19/hg38.
 
 Rationale documented in ``catalog/wgd_calls.yml`` under ``id_normalisation``.
 """
@@ -74,6 +77,35 @@ def canonical_clone_expr(col: str) -> pl.Expr:
         pl.when(pl.col(col).is_null() | pl.col(col).is_nan())
         .then(None)
         .otherwise(pl.format("clone{}", pl.col(col).cast(pl.Int64)))
+        .alias(col)
+    )
+
+
+def canonical_chr(value) -> str | None:
+    """Strip a leading ``chr`` prefix and coerce to string.
+
+    Accepts int (``17``), string (``"chr17"``, ``"17"``, ``"X"``), or None.
+    Returns None for null. `MT` and `chrM` both collapse to `MT`.
+    """
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    s = str(value)
+    if s.startswith("chr"):
+        s = s[3:]
+    if s == "M":
+        s = "MT"
+    return s
+
+
+def canonical_chr_expr(col: str) -> pl.Expr:
+    """Polars expression version — vectorised prefix strip + ``M`` → ``MT``."""
+    return (
+        pl.col(col)
+        .cast(pl.Utf8)
+        .str.strip_prefix("chr")
+        .replace({"M": "MT"})
         .alias(col)
     )
 

@@ -62,12 +62,13 @@ tumour_id_form_in_path: "LTX0001_tumour1"  # matches muttable form; loader norma
 joins:
   muttable:
     on:
-      - "alphamissense.tumour_id = normalise_tumour_id(muttable.patient_tumour)"
+      - "alphamissense.tumour_id = muttable.tumour_id"
       - "alphamissense.chr       = muttable.chr"
       - "alphamissense.pos       = muttable.pos      -- works for both SNVs and indels"
-      - "alphamissense.alt       = muttable.var"
+      - "alphamissense.alt       = muttable.alt"
     notes: |
       Ref allele is NOT emitted by VEP output; join is on (chr, pos, alt).
+      Every join key uses a canonical tx_data column name — no coercion needed.
 
       **Uniform join for SNVs and indels via muttable.pos**, confirmed 2026-08-31
       by a deletion spot-check: for the deletion at muttable.start=99003981,
@@ -239,10 +240,10 @@ relationships:
   - column: tumour_id
     references: tumours.tumour_id                     # TBC
   - column: [tumour_id, chr, pos, alt]
-    references: [muttable.patient_tumour, muttable.chr, muttable.pos, muttable.var]
+    references: [muttable.tumour_id, muttable.chr, muttable.pos, muttable.alt]
     notes: |
-      After tumour_id normalisation. Join uses muttable.pos (NOT muttable.start)
-      so the same key works for both SNVs and indels. Ref allele not in AM file;
+      Direct canonical join. Uses muttable.pos (NOT muttable.start) so the
+      same key works for both SNVs and indels. Ref allele not in AM file;
       biallelic assumption is safe here because the mutation set upstream is
       already dedupped per (chr, pos, ref, alt).
   - column: Gene

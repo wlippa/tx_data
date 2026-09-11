@@ -41,13 +41,9 @@ joins:
 
   muttable:
     on:
-      # After tumour_id normalisation and clone coercion:
-      #   muttable.patient_tumour ('LTX0001_tumour1') → normalise → 'LTX0001-Tumour1'
-      #   muttable.mutation_cluster (1.0) → 'clone1'
-      # Then attach a mutation to its clone's ALPACA row(s) whose segment covers
-      # the mutation's (chr, pos).
-      - "alpaca.tumour_id = normalise_tumour_id(muttable.patient_tumour)"
-      - "alpaca.clone = 'clone' || CAST(muttable.mutation_cluster AS INT)"
+      # All columns share canonical names after the tx_data v2 build.
+      - "alpaca.tumour_id   = muttable.tumour_id"
+      - "alpaca.clone       = muttable.clone"
       - "alpaca.segment_chr = muttable.chr"
       - "muttable.pos BETWEEN alpaca.segment_start AND alpaca.segment_end"
     notes: |
@@ -92,9 +88,8 @@ columns:
   - name: tumour_id
     type: VARCHAR
     description: |
-      Canonical tumour ID (e.g. `LTX0001-Tumour1`). Matches wgd_calls's form
-      directly; muttable's `patient_tumour` (`LTX0001_tumour1`) requires
-      normalisation to match.
+      Canonical tumour ID (e.g. `LTX0001-Tumour1`). Shared across every
+      tx_data per-tumour table.
     null_semantics: not_applicable
 
   - name: segment
@@ -108,9 +103,8 @@ columns:
   - name: clone
     type: VARCHAR
     description: |
-      Clone / CONIPHER cluster ID (e.g. `clone1`, `clone10`). Matches
-      `wgd_calls.clone` directly. Equivalent to `muttable.mutation_cluster`
-      after string coercion.
+      Clone / CONIPHER cluster ID (e.g. `clone1`, `clone10`). Canonical
+      name across muttable, wgd_calls, alpaca and clone_proportions.
     null_semantics: not_applicable
 
   - name: pred_CN_A

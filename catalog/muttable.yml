@@ -16,9 +16,23 @@ provenance:
 
 primary_key:
   # A single mutation per sample is uniquely identified by mutation_id + sample_name_hash.
-  # (mutation_id already encodes patient_tumour + chr + pos + ref + alt.)
+  # (mutation_id already encodes tumour_id + chr + pos + ref + alt.)
   - mutation_id
   - sample_name_hash
+
+column_renames:
+  # Applied by the tx_data build step so every per-tumour parquet uses the
+  # same canonical column names. Left = source-side (raw TSV), right = tx_data
+  # canonical. Downstream code should ONLY reference the canonical names.
+  patient_tumour: tumour_id           # string LTX0001-Tumour1 (canonical)
+  tumour_id: tumour_ordinal           # source integer 1/2/... (now clearly named)
+  mutation_cluster: clone             # cloneN string (matches wgd_calls / alpaca)
+  var: alt                            # matches alphamissense.alt
+
+value_normalisation:
+  tumour_id: "underscore/hyphen form coerced to `LTX0001-Tumour1`"
+  clone: "int/float `1.0` coerced to string `clone1`; NaN → null"
+  chr: "`chr17` → `17`; `chrM`/`M` → `MT`; always String"
 
 grain: one row per (mutation, sample) pair
 
@@ -50,13 +64,19 @@ columns:
     type: VARCHAR
     description: TRACERx patient ID (e.g. LTX0100).
     null_semantics: unknown
-  - name: patient_tumour
-    type: VARCHAR
-    description: Patient + tumour compound ID (e.g. LTX0100_tumour1). Some patients have more than one tumour.
-    null_semantics: unknown
   - name: tumour_id
+    type: VARCHAR
+    description: |
+      Canonical tumour ID (e.g. `LTX0100-Tumour1`). Source column
+      `patient_tumour` is normalised from `LTX0100_tumour1` to this form and
+      renamed by the tx_data builder.
+    null_semantics: unknown
+  - name: tumour_ordinal
     type: INTEGER
-    description: Tumour ordinal within the patient (1, 2, ...). Present as an int alongside `patient_tumour` for convenience.
+    description: |
+      Tumour ordinal within the patient (1, 2, ...). Source column name was
+      `tumour_id`; renamed here because tx_data uses `tumour_id` for the
+      canonical string form.
     null_semantics: unknown
   - name: sample_name_hash
     type: VARCHAR
@@ -72,7 +92,7 @@ columns:
     type: VARCHAR
     description: |
       Unique mutation identifier per patient/tumour. Format:
-      {patient}_{tumour_ordinal}:{chr}:{pos}:{ref}:{var}
+      {patient}_{tumour_ordinal}:{chr}:{pos}:{ref}:{alt}
       Examples:
         SNV       LTX0100_1:10:105200138:C:G
         Deletion  LTX0001_1:10:99003980:A:-
@@ -115,11 +135,13 @@ columns:
       following the null-marker convention used for deletions' `var`.
     null_semantics: unknown
     notes: "The `-` character is used as the null-allele marker on the opposite side of the indel."
-  - name: var
+  - name: alt
     type: VARCHAR
     description: |
       Variant (alternate) allele. For SNVs, one base. For DELETIONS, `-` (the
       null-allele marker). For INSERTIONS: presumably the inserted bases — TBC.
+      Source column name was `var`; renamed to `alt` for consistency with
+      alphamissense.alt.
     null_semantics: unknown
 
   # ---- per-sample calling evidence ----
@@ -368,16 +390,18 @@ columns:
     type: VARCHAR
     description: Timing label (e.g. early). Provenance and rule TBC.
     notes: "Ignore for now (2026-08-31) — origin unknown, do not use in analysis until documented."
-  - name: mutation_cluster
-    type: DOUBLE
+  - name: clone
+    type: VARCHAR
     description: |
-      CONIPHER cluster ID (also called 'clone' informally, though strictly a
-      cluster is not always a clone). Integer when the mutation was used in
-      clustering; NaN when it was not (mutation still detected, but excluded
-      from subclonal reconstruction).
-      Clustering is per patient_tumour: cluster IDs are unique within a tumour,
+      CONIPHER cluster ID canonicalised to `cloneN` string form. Source
+      column name was `mutation_cluster` (float); tx_data normalises the
+      value (`1.0` → `"clone1"`) and renames the column to `clone` to match
+      wgd_calls / alpaca / clone_proportions.
+      Null when the mutation was excluded from clustering (still detected,
+      but not placed on the subclonal reconstruction).
+      Clustering is per tumour: `clone` ids are unique within a tumour,
       NOT across tumours or across patients.
-    null_semantics: not_applicable   # NaN = mutation excluded from clustering
+    null_semantics: not_applicable   # null = mutation excluded from clustering
   - name: clean_cluster
     type: BOOLEAN
     description: Cluster passed cleaning/QC.
@@ -450,7 +474,7 @@ columns:
 
 scope_notes: |
   Some entities in this cohort are per-PATIENT, others per-TUMOUR. Some patients
-  have multiple tumours, encoded in `patient_tumour` (e.g. `LTX0001_tumour2`).
+  have multiple tumours, encoded in `tumour_id` (e.g. `LTX0001-Tumour2`).
   - PER-TUMOUR: clustering, phylogeny, WGD calls (via PGDD on the tumour tree),
     mutation aggregates like max_vaf.
   - PER-PATIENT: clinical outcomes (survival), demographics.
@@ -461,13 +485,13 @@ scope_notes: |
 relationships:
   # To be filled in as we catalog the sibling tables.
   - column: patient_id
-    references: patients.patient_id     # per-patient (TBC)
-  - column: patient_tumour
-    references: tumours.patient_tumour  # per-tumour  (TBC)
+    references: patients.patient_id           # per-patient (TBC)
+  - column: tumour_id
+    references: wgd_calls.tumour_id           # per-tumour, canonical
   - column: sample_name_hash
-    references: samples.sample_name_hash  # per-region (TBC)
-  - column: mutation_cluster
-    references: mutation_clusters.mutation_cluster  # unique within patient_tumour (TBC)
+    references: samples.sample_name_hash      # per-region (TBC)
+  - column: clone
+    references: wgd_calls.clone               # unique within tumour_id
 
 open_questions:
   - "Insertion encoding: does `ref == '-'`, `pos == start - 1`? Need an insertion example to confirm."

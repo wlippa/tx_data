@@ -27,7 +27,7 @@ from pathlib import Path
 import polars as pl
 
 from tx_data.builds._base import canonical_output_path, log
-from tx_data.normalize import canonical_tumour_id
+from tx_data.normalize import canonical_chr_expr, canonical_tumour_id
 from tx_data.sources import resolve_source, source_entry
 
 TABLE = "alphamissense"
@@ -121,11 +121,15 @@ def build() -> pl.DataFrame:
         raw.write_parquet(out)
         return raw
 
-    # Rename to the canonical column names downstream expects, and coerce
+    # Rename to the canonical column names downstream expects, coerce
     # `am_class` from whatever variant the upstream emitted to the canonical
-    # {benign, ambiguous, pathogenic, null} set.
+    # {benign, ambiguous, pathogenic, null} set, and normalise `chr` (strip
+    # any `chr` prefix so it matches muttable / driver_list / alpaca).
     parsed = raw.rename({"alpha_missense": "am_pathogenicity", "var": "alt"}).with_columns(
-        pl.col("am_class").replace(_AM_CLASS_CANONICAL, default=None)
+        [
+            pl.col("am_class").replace(_AM_CLASS_CANONICAL, default=None),
+            canonical_chr_expr("chr"),
+        ]
     )
 
     # Dedup to per-variant. Real files are long-form (per mutation × sample),

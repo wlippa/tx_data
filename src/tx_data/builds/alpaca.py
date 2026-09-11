@@ -13,6 +13,7 @@ from __future__ import annotations
 import polars as pl
 
 from tx_data.builds._base import canonical_output_path, log
+from tx_data.normalize import canonical_chr_expr
 from tx_data.sources import resolve_source
 
 TABLE = "alpaca"
@@ -45,6 +46,9 @@ def build() -> pl.DataFrame:
         [
             pl.col("segment_start_s").cast(pl.Int64).alias("segment_start"),
             pl.col("segment_end_s").cast(pl.Int64).alias("segment_end"),
+            # Strip any `chr` prefix on segment_chr so it matches the
+            # canonical no-prefix form used everywhere else.
+            canonical_chr_expr("segment_chr"),
         ]
     ).drop(["segment_start_s", "segment_end_s"])
 

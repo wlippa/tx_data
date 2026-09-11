@@ -15,7 +15,7 @@ description: |
      Combined with the row per clone, this IS the parent-child edge list per
      tumour; no separate tree file needed.
 
-  Together these are enough to label any mutation (via its `mutation_cluster`
+  Together these are enough to label any mutation (via its `clone`
   in muttable) as pre-WGD, post-WGD, no-WGD, or off-lineage relative to any
   WGD event(s) in its tumour.
 
@@ -37,35 +37,38 @@ grain: one row per (tumour × clone)
 genome_build: hg19    # matches muttable and other Tx842 assets
 
 joins:
-  # Note: the `clone` column here corresponds to `mutation_cluster` in muttable.
-  # Same underlying CONIPHER cluster IDs, named differently across files.
-  # See `id_normalisation` below re: tumour_id spelling.
+  # After the tx_data v2 canonicalisation pass every per-tumour table uses the
+  # same column names, so joins are trivial.
   muttable:
     on:
-      - "wgd_calls.tumour_id = normalise_tumour_id(muttable.patient_tumour)"
-      - "wgd_calls.clone = 'clone' || CAST(muttable.mutation_cluster AS INT)"
-    notes: |
-      Naming conventions diverge:
-        - tumour_id in this file: `LTX0001-Tumour1` (hyphen + capital T)
-        - patient_tumour in muttable: `LTX0001_tumour1` (underscore + lowercase t)
-        - clone in this file: string `clone1`, `clone10`, ...
-        - mutation_cluster in muttable: float `1.0`, `10.0`, ...
-      The tx_data loaders should normalise both to a single canonical form on
-      import. See `id_normalisation` below.
+      - "wgd_calls.tumour_id = muttable.tumour_id"
+      - "wgd_calls.clone = muttable.clone"
 
 id_normalisation:
-  # Canonical scheme to enforce across ALL tx_data tables.
-  # Rationale: pick one form and let the loaders coerce inbound data into it,
-  # so downstream code never has to know which source used which convention.
+  # Canonical schema shared across ALL tx_data tables (applied at build time).
   tumour_id:
-    canonical: "LTX0001-Tumour1"        # hyphen, capital T — matches wgd_calls form
-    coercions:
-      - "muttable.patient_tumour: 'LTX0001_tumour1' → 'LTX0001-Tumour1' (regex replace)"
+    canonical: "LTX0001-Tumour1"        # hyphen + capital T; String
+    source_coercions:
+      - "muttable.patient_tumour ('LTX0001_tumour1') → tumour_id"
+      - "muttable.tumour_id (integer ordinal) → tumour_ordinal"
   clone:
-    canonical: "clone1"                 # string with 'clone' prefix — matches wgd_calls form
-    coercions:
-      - "muttable.mutation_cluster: 1.0 (float) → 'clone1' (string). NaN → NULL."
-  # TODO revisit if downstream code has strong preference for the muttable form.
+    canonical: "clone1"                 # string with 'clone' prefix
+    source_coercions:
+      - "muttable.mutation_cluster (float 1.0) → clone ('clone1'); NaN → NULL"
+  alt:
+    canonical: "alt"                    # matches alphamissense.alt
+    source_coercions:
+      - "muttable.var → alt"
+  chr:
+    canonical: "no `chr` prefix"        # '17', 'X', 'MT'; String
+    source_coercions:
+      - "any 'chrN' → 'N'; 'M' → 'MT'"
+      - applied_to:
+        - muttable.chr
+        - alphamissense.chr
+        - alpaca.segment_chr
+        - driver_list.chr_hg19
+        - driver_list.chr_hg38
 
 filters_of_interest:
   # HARD FILTER for any downstream analysis: only `resolved` tumours are
@@ -104,17 +107,15 @@ columns:
   - name: tumour_id
     type: VARCHAR
     description: |
-      Per-tumour identifier, e.g. LTX0001-Tumour1. NOTE the spelling
-      convention differs from muttable's `patient_tumour` (`LTX0001_tumour1`);
-      loader normalises both to a canonical form on import (see id_normalisation).
+      Canonical per-tumour identifier, e.g. `LTX0001-Tumour1`. Shared across
+      every tx_data per-tumour table (see id_normalisation).
     null_semantics: not_applicable
 
   - name: clone
     type: VARCHAR
     description: |
-      Clone / CONIPHER cluster ID, e.g. clone1, clone2, ..., clone10.
-      "Clone" here is informally used for what muttable calls
-      `mutation_cluster` — same underlying identifier, string form.
+      Clone / CONIPHER cluster ID, e.g. `clone1`, `clone2`, ..., `clone10`.
+      Canonical name across muttable, alpaca, wgd_calls, and clone_proportions.
     null_semantics: not_applicable
 
   - name: parent
@@ -203,7 +204,7 @@ relationships:
   - column: tumour_id
     references: tumours.tumour_id            # TBC — canonical after normalisation
   - column: [tumour_id, clone]
-    references: [muttable.patient_tumour, muttable.mutation_cluster]  # after coercion
+    references: [muttable.tumour_id, muttable.clone]                  # canonical
   - column: [tumour_id, parent]
     references: [wgd_calls.tumour_id, wgd_calls.clone]                # self-reference for tree
 

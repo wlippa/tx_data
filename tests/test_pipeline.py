@@ -34,10 +34,19 @@ def _build_all():
 
 def test_muttable_shape():
     df = pl.read_parquet(DATA / "muttable.parquet")
+    # Canonical column names shared with every other per-tumour table.
+    assert "tumour_id" in df.columns
+    assert "clone" in df.columns
+    assert "alt" in df.columns
+    assert "patient_tumour" not in df.columns
+    assert "mutation_cluster" not in df.columns
+    assert "var" not in df.columns
     # Canonical tumour_id form applied.
-    assert df["patient_tumour"].str.contains("-Tumour").all()
+    assert df["tumour_id"].str.contains("-Tumour").all()
     # Clone form: string 'cloneN' or null.
-    assert df["mutation_cluster"].drop_nulls().str.starts_with("clone").all()
+    assert df["clone"].drop_nulls().str.starts_with("clone").all()
+    # `chr` stripped of any `chr` prefix (values like "17", "X", "MT").
+    assert not df["chr"].str.starts_with("chr").any()
 
 
 def test_wgd_calls_derived_columns():
@@ -87,11 +96,25 @@ def test_id_normalisation_consistency():
     """The tumour_id form in muttable must match wgd_calls after normalisation."""
     mut = pl.read_parquet(DATA / "muttable.parquet")
     wgd = pl.read_parquet(DATA / "wgd_calls.parquet")
-    mut_tumours = set(mut["patient_tumour"].unique().to_list())
+    mut_tumours = set(mut["tumour_id"].unique().to_list())
     wgd_tumours = set(wgd["tumour_id"].unique().to_list())
     # muttable side already normalised by builder.
     common = mut_tumours & wgd_tumours
     assert common, f"no overlap; mut={list(mut_tumours)[:3]} wgd={list(wgd_tumours)[:3]}"
+
+
+def test_chr_columns_have_no_prefix():
+    """Every table with a chr column should carry values without `chr` prefix."""
+    for path, cols in [
+        (DATA / "muttable.parquet", ["chr"]),
+        (DATA / "alphamissense.parquet", ["chr"]),
+        (DATA / "alpaca.parquet", ["segment_chr"]),
+        (DATA / "driver_list.parquet", ["chr_hg19", "chr_hg38"]),
+    ]:
+        df = pl.read_parquet(path)
+        for col in cols:
+            starts = df[col].drop_nulls().str.starts_with("chr")
+            assert not starts.any(), f"{path.name}:{col} has `chr` prefix on some rows"
 
 
 def test_clone_proportions_shape():

@@ -9,6 +9,7 @@ from __future__ import annotations
 import polars as pl
 
 from tx_data.builds._base import canonical_output_path, log
+from tx_data.normalize import canonical_chr_expr
 from tx_data.sources import resolve_source
 
 TABLE = "driver_list"
@@ -47,6 +48,12 @@ def build() -> pl.DataFrame:
             )
     if coercions:
         df = df.with_columns(coercions)
+
+    # Normalise chromosome columns (strip `chr` prefix) so joins line up with
+    # muttable.chr, alphamissense.chr, and alpaca.segment_chr.
+    df = df.with_columns(
+        [canonical_chr_expr("chr_hg19"), canonical_chr_expr("chr_hg38")]
+    )
 
     out = canonical_output_path(TABLE)
     df.write_parquet(out)
