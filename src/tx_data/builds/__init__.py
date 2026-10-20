@@ -4,10 +4,15 @@ from tx_data.builds import (
     alpaca,
     alphamissense,
     clinical,
+    clone_info,
     clone_proportions,
+    conipher_trees,
     driver_list,
+    hg19_refgene,
+    id_crosswalk,
     kallisto,
     muttable,
+    seeding_table,
     wgd_calls,
 )
 
@@ -20,6 +25,11 @@ __all__ = [
     "alpaca",
     "kallisto",
     "clone_proportions",
+    "id_crosswalk",
+    "clone_info",
+    "seeding_table",
+    "hg19_refgene",
+    "conipher_trees",
 ]
 
 BUILDERS = {
@@ -31,4 +41,9 @@ BUILDERS = {
     "alpaca": alpaca.build,
     "kallisto": kallisto.build,
     "clone_proportions": clone_proportions.build,
+    "id_crosswalk": id_crosswalk.build,
+    "clone_info": clone_info.build,
+    "seeding_table": seeding_table.build,
+    "hg19_refgene": hg19_refgene.build,
+    "conipher_trees": conipher_trees.build,
 }

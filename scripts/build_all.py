@@ -27,6 +27,16 @@ TABLES = (
     "alpaca",
     "kallisto",
     "clone_proportions",
+    # id_crosswalk must come before clone_info / seeding_table — the latter
+    # two read it (via tx_data.ids) to translate CRUK ↔ LTX patient
+    # identifiers when the source and target conventions differ.
+    "id_crosswalk",
+    "clone_info",
+    "seeding_table",
+    "hg19_refgene",
+    # conipher_trees emits TWO parquets (conipher_ccf, conipher_clonality);
+    # _write_manifest discovers both via its special-case fallbacks below.
+    "conipher_trees",
 )
 
 
@@ -69,6 +79,12 @@ def _write_manifest(
             p2 = data_dir / "kallisto_paired_normals.parquet"
             if p2.is_file():
                 row_counts["kallisto_paired_normals"] = pl.read_parquet(p2).height
+        # conipher_trees builder emits two parquets, neither named after the table.
+        if name == "conipher_trees":
+            for sub in ("conipher_ccf", "conipher_clonality"):
+                p2 = data_dir / f"{sub}.parquet"
+                if p2.is_file():
+                    row_counts[sub] = pl.read_parquet(p2).height
 
     manifest = {
         "built_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),

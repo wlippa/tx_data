@@ -24,6 +24,13 @@ alt_source_roots:
   # top-level cluster root, different subtree. Kept as a named root so tests
   # and downstream projects don't hardcode the path.
   tx842_mets_rnaseq: /nemo/project/proj-tracerx-lung/tctProjects/lungTx/Tx842/release/tx842_mets_rnaseq
+  # Clinical / QC release tree — sits outside the main tracerx_842 release
+  # subtree. Used currently by id_crosswalk; may host more clinical assets.
+  tx842_clinical_qc: /nemo/project/proj-tracerx-lung/tctProjects/lungTx/Tx842/clinical_qc/6_release/cohort
+  # Static hg19 reference files (UCSC downloads). Not cohort-specific.
+  # Override on the HPC once a shared static-refs location is picked;
+  # in the mock and for local dev, resolves to nemo_mock/alt/hg19_reference/.
+  hg19_reference: /nemo/project/proj-tracerx-lung/references/hg19
 
 sources:
   muttable:
@@ -156,4 +163,95 @@ sources:
     notes: |
       Same shape as `kallisto_counts`; the loader hard-fails if gene and
       sample sets diverge between the two files.
+
+  id_crosswalk:
+    source_root: tx842_clinical_qc
+    relative_path: 2026-06-08_LTX_CRUK_key.csv
+    format: csv
+    header: true
+    received: 2026-09-23
+    notes: |
+      Patient-level TRACERx identifier crosswalk. Columns on source:
+      `PatientID` (LTX form, e.g. `LTX0192`) and `CRUK_ID` (CRUK form,
+      e.g. `CRUK0090`). One-to-one at patient level. Backs the CRUK ↔ LTX
+      translation used by `tx_data.ids` and by any build that ingests
+      CRUK-keyed sources (currently: clone_info).
+
+  hg19_refgene__refgene:
+    source_root: hg19_reference
+    relative_path: refGene.txt.gz
+    format: tsv_gz
+    header: false
+    received: 2026-09-23
+    notes: |
+      UCSC refGene table for hg19, gzipped, no header. Column order:
+      bin, name, chrom, strand, txStart, txEnd, cdsStart, cdsEnd, exonCount,
+      exonStarts, exonEnds, score, name2, cdsStartStat, cdsEndStat, exonFrames.
+      Consumed together with `hg19_refgene__cytoband` by the `hg19_refgene`
+      builder.
+
+  hg19_refgene__cytoband:
+    source_root: hg19_reference
+    relative_path: cytoBand.txt.gz
+    format: tsv_gz
+    header: false
+    received: 2026-09-23
+    notes: |
+      UCSC cytoBand table for hg19, gzipped, no header. Column order:
+      chrom, chromStart, chromEnd, band_name (e.g. `p36.33`), gie_stain.
+
+  seeding_table:
+    relative_path: primary_met/tx842_primary_met_seedingTableFull.txt
+    format: ssv
+    header: true
+    received: 2026-09-23
+    notes: |
+      Space-separated text (R data.frame written by `write.table`;
+      default sep). Per-tumour seeding characterisation. Source
+      `tumour_id` uses LTX bare-underscore form (`LTX0121_1`); loader
+      auto-detects the flavour via `tx_data.ids`. Six columns:
+      camelCase `seedingClonality`, `seedingPhyletic`,
+      `individualSeedingClonality`, `individualSeedingPhyletic`,
+      `nRegions`. Loader asserts that the two `individual_*` columns
+      split to `n_regions` tokens.
+
+  clone_info:
+    relative_path: tx842_primary_met_cloneInfo.df.txt
+    format: tsv
+    header: true
+    received: 2026-09-23
+    notes: |
+      Tab-separated text (R data.frame written by `write.table`). Source
+      `tumour_id` uses the LTX prefix but WITHOUT a `Tumour`/`Cluster` word
+      — bare underscore + integer, e.g. `LTX0121_1`. The build script uses
+      `tx_data.ids.apply_convention_scalar` to auto-detect the flavour;
+      any of LTX-Tumour / LTX_tumour / LTX_N / LTX-Cluster / CRUK_N /
+      CRUK-Cluster / CRUK-Tumour is accepted. `mutation_cluster` is
+      snake_case; the classification columns are camelCase (`treeClones`,
+      `seedingClones`, etc.). All rows are preserved — `treeClones == FALSE`
+      clusters are real mutations that CONIPHER did not fit on the tree
+      and are kept for downstream analyses that want them.
+
+  conipher_trees:
+    relative_path: tx842_trees.RDS                     # resolves against source_root_default
+    format: rds                                        # R-native serialized object; loader uses R subprocess
+    header: false
+    received: 2026-10-15
+    received_via: Odysseus (Discord) supplied Nemo path
+    notes: |
+      Single cohort-wide RDS bundle produced by CONIPHER post-processing.
+      Expected (TBC — Nemo probe pending) to be a named list keyed by
+      tumour_id, each element carrying at least:
+        $nested_pyclone$ccf_cluster_table
+        $clonality_out$clonality_table_corrected
+      which `DRIVERORDERING_run_btm.R` reads to compute per-clone CCF
+      metrics for the BTM step (Main Fig 4 b/c + ED Fig 6 BTM panels).
+
+      Canonicalisation plan (deferred until probe confirms structure):
+      - Emit two long parquets, `conipher_ccf.parquet` (tumour_id, clone,
+        region, ccf) and `conipher_clonality.parquet` (tumour_id, clone,
+        region, label ∈ {clonal, subclonal}).
+      - Downstream adapter in `tx800_alpaca_replica/scripts/prep/` writes
+        the per-tumour `<tumour_id>_trees.rds` files the paper's R script
+        expects.
 

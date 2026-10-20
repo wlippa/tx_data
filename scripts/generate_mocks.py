@@ -669,6 +669,10 @@ def _pick_alpaca_cn(spec: TumourSpec, clone: Clone, chrom: str) -> tuple[int, in
       - WGD in this clone's lineage → 2|2 (single WGD) or 4|4 (double).
       - TP53 (chr17) in a subclonal branch of a mut_supported tumour → LOH 1|0.
       - CDKN2A stand-in (chr7, using EGFR's chr) in one clone of LTX0005 → homdel 0|0.
+      - Per-clone stochastic CN drift for non-root clones on non-hotspot
+        chromosomes, so downstream SCNA analyses see non-trivial subclonal
+        variation instead of a flat 1|1 landscape. Seeded per
+        (tumour, clone, chrom) so runs stay reproducible.
     """
     # WGD baseline.
     cum_gd = _cumulative_gds(spec, clone.name)
@@ -676,15 +680,44 @@ def _pick_alpaca_cn(spec: TumourSpec, clone: Clone, chrom: str) -> tuple[int, in
     b = 1 + cum_gd
 
     # Targeted edge cases so tests can assert on specific tumours.
+    hotspot = False
     if spec.tumour_id_canonical == "LTX0004-Tumour1" and clone.name in ("clone2", "clone4") and chrom == "17":
         # TP53 LOH on the branch containing clone4.
         a, b = a + b, 0
+        hotspot = True
     if spec.tumour_id_canonical == "LTX0005-Tumour1" and clone.name == "clone5" and chrom == "12":
         # Homdel on a small chromosome-12 segment (covering the mock KRAS region).
         a, b = 0, 0
+        hotspot = True
     if spec.tumour_id_canonical == "LTX0002-Tumour1" and clone.name == "clone2" and chrom == "10":
         # Post-WGD LOH: 4→2|0 (loses one allele after doubling).
         a, b = a + b, 0
+        hotspot = True
+
+    # Stochastic per-clone SCNA drift so subclonal analyses see signal.
+    # Root clones (parent="diploid") stay at baseline; only descendants drift.
+    # Skips hotspot overrides so those stay deterministic.
+    if not hotspot and clone.parent != "diploid":
+        import random as _random
+        rng = _random.Random(hash((spec.tumour_id_canonical, clone.name, chrom)) & 0xFFFFFFFF)
+        # 40% chance of some SCNA event on this (clone, chrom).
+        if rng.random() < 0.40:
+            event = rng.choices(
+                ["gain_A", "gain_B", "loss_A", "loss_B", "loh_A", "loh_B"],
+                weights=[0.25, 0.25, 0.20, 0.20, 0.05, 0.05],
+            )[0]
+            if event == "gain_A":
+                a += 1
+            elif event == "gain_B":
+                b += 1
+            elif event == "loss_A":
+                a = max(0, a - 1)
+            elif event == "loss_B":
+                b = max(0, b - 1)
+            elif event == "loh_A":
+                a, b = a + b, 0
+            elif event == "loh_B":
+                a, b = 0, a + b
     return int(a), int(b)
 
 
@@ -857,6 +890,43 @@ def _write_clone_proportions(specs: list[TumourSpec]) -> None:
     print(f"wrote {sum(1 for s in specs if s.status == 'resolved')} cp_table.csv files under {CLONE_PROP_ROOT}")
 
 
+def _write_cohort_manifest(specs: list[TumourSpec]) -> None:
+    """Emit `nemo_mock/_cohort_manifest.json` for cross-language mock gens.
+
+    The R mock generator for `conipher_trees` (and any future R-side mock)
+    reads this file instead of duplicating the Python-side `cohort()` logic.
+    Only the fields R-side generators actually need are emitted — enough to
+    re-derive clone trees, sample names, and tumour IDs in whatever
+    convention the downstream mock requires.
+    """
+    import json
+
+    manifest = {
+        "schema_version": 1,
+        "cohort_tag": "Tx842_mock",
+        "random_seed": 20260831,
+        "tumours": [
+            {
+                "patient_id": spec.patient_id,
+                "tumour_ordinal": spec.tumour_ordinal,
+                "tumour_id_canonical": spec.tumour_id_canonical,  # LTX0001-Tumour1
+                "tumour_id_muttable": spec.tumour_id_muttable,    # LTX0001_tumour1
+                "status": spec.status,
+                "histology_group": spec.histology_group,
+                "n_samples": spec.n_samples,
+                "clones": [
+                    {"name": c.name, "parent": c.parent, "gds_at_clone": c.gds_at_clone}
+                    for c in spec.clones
+                ],
+            }
+            for spec in specs
+        ],
+    }
+    out = MOCK_ROOT / "_cohort_manifest.json"
+    out.write_text(json.dumps(manifest, indent=2))
+    print(f"wrote {out} ({len(manifest['tumours'])} tumours)")
+
+
 def main() -> None:
     MOCK_ROOT.mkdir(parents=True, exist_ok=True)
     specs = cohort()
@@ -870,7 +940,13 @@ def main() -> None:
     _write_alpaca(specs)
     _write_kallisto(specs)
     _write_clone_proportions(specs)
+    _write_cohort_manifest(specs)
     print("done.")
+    print(
+        "note: `conipher_trees` mock (`nemo_mock/tx842_trees.RDS`) is produced by\n"
+        "      `Rscript scripts/generate_mock_conipher_trees.R` — requires an R env\n"
+        "      with the `jsonlite` package (e.g. the tx800_alpaca_replica pixi env)."
+    )
 
 
 if __name__ == "__main__":

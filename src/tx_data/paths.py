@@ -43,6 +43,31 @@ def data_root() -> Path:
     return DEFAULT_MOCK_ROOT
 
 
+def id_convention() -> str:
+    """Global tumour-id convention: 'ltx' (default) or 'cruk'.
+
+    Precedence:
+      1. ``TX_ID_CONVENTION`` env var.
+      2. ``id_convention`` field in ``config/paths.yml``.
+      3. ``'ltx'`` (tx_data legacy).
+    """
+    env = os.environ.get("TX_ID_CONVENTION")
+    if env:
+        v = env.strip().lower()
+    elif DEFAULT_PATHS_YML.is_file():
+        cfg = yaml.safe_load(DEFAULT_PATHS_YML.read_text()) or {}
+        v = str(cfg.get("id_convention", "ltx")).strip().lower()
+    else:
+        v = "ltx"
+
+    if v not in ("ltx", "cruk"):
+        raise ValueError(
+            f"id_convention must be 'ltx' or 'cruk' (got {v!r}). "
+            "Set TX_ID_CONVENTION or edit config/paths.yml."
+        )
+    return v
+
+
 def data_root_is_mock() -> bool:
     """True when `data_root()` is the repo-local mock tree (nemo_mock/)."""
     try:

@@ -33,3 +33,9 @@ db/*
 !db/.gitkeep
 
 # nemo_mock/ is checked in — it IS the synthetic mock, not derived
+
+# temp data:
+temp_data/
+
+# notes:
+labbook

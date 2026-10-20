@@ -38,3 +38,22 @@ def test_catalog_dir_exists():
 
 def test_catalog_load_all_returns_dict():
     assert isinstance(catalog.load_all(), dict)
+
+
+def test_id_convention_default_is_ltx(monkeypatch):
+    monkeypatch.delenv("TX_ID_CONVENTION", raising=False)
+    # `config/paths.yml` ships `id_convention: ltx` — should be honoured.
+    assert paths.id_convention() == "ltx"
+
+
+def test_id_convention_env_override(monkeypatch):
+    monkeypatch.setenv("TX_ID_CONVENTION", "cruk")
+    assert paths.id_convention() == "cruk"
+
+
+def test_id_convention_rejects_garbage(monkeypatch):
+    monkeypatch.setenv("TX_ID_CONVENTION", "wat")
+    import pytest
+
+    with pytest.raises(ValueError):
+        paths.id_convention()
